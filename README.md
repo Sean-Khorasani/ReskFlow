@@ -31,7 +31,7 @@ A cutting-edge enterprise delivery platform leveraging blockchain technology for
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/ReskFlow.git
+git clone https://github.com/Sean-Khorasani/ReskFlow.git
 cd ReskFlow
 ```
 
@@ -116,5 +116,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 - Documentation: [docs.reskflow.com](https://docs.reskflow.com)
-- Issues: [GitHub Issues](https://github.com/your-org/ReskFlow/issues)
+- Issues: [GitHub Issues](https://github.com/Sean-Khorasani/ReskFlow/issues)
 - Email: support@reskflow.com
