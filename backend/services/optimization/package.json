@@ -1,0 +1,32 @@
+{
+  "name": "@reskflow/optimization-service",
+  "version": "1.0.0",
+  "description": "AI/ML route optimization service",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "start": "node dist/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@reskflow/shared": "workspace:*",
+    "express": "^4.18.2",
+    "@tensorflow/tfjs-node": "^4.15.0",
+    "brain.js": "^2.0.0-beta.23",
+    "ml-kmeans": "^6.0.0",
+    "ml-regression": "^5.0.0",
+    "@turf/turf": "^6.5.0",
+    "@googlemaps/google-maps-services-js": "^3.3.42",
+    "node-osrm": "^5.27.1",
+    "genetic-js": "^0.1.14",
+    "bullmq": "^5.1.0",
+    "node-schedule": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/express": "^4.17.21",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2"
+  }
+}

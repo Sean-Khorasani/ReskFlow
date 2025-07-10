@@ -1,0 +1,316 @@
+import { gql } from 'apollo-server-express';
+
+export const typeDefs = gql`
+  scalar DateTime
+  scalar JSON
+
+  enum UserRole {
+    CUSTOMER
+    DRIVER
+    ADMIN
+    PARTNER
+  }
+
+  enum DeliveryStatus {
+    CREATED
+    ASSIGNED
+    PICKED_UP
+    IN_TRANSIT
+    DELIVERED
+    CANCELLED
+    FAILED
+  }
+
+  enum VehicleType {
+    BICYCLE
+    MOTORCYCLE
+    CAR
+    VAN
+    TRUCK
+  }
+
+  enum PaymentStatus {
+    PENDING
+    PROCESSING
+    COMPLETED
+    FAILED
+    REFUNDED
+  }
+
+  type User {
+    id: ID!
+    email: String!
+    phone: String
+    firstName: String!
+    lastName: String!
+    role: UserRole!
+    walletAddress: String
+    emailVerified: Boolean!
+    phoneVerified: Boolean!
+    isActive: Boolean!
+    profile: UserProfile
+    addresses: [Address!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type UserProfile {
+    id: ID!
+    avatar: String
+    dateOfBirth: DateTime
+    vehicleType: VehicleType
+    vehicleNumber: String
+    rating: Float!
+    completedDeliveries: Int!
+    totalEarnings: Float!
+    isVerified: Boolean!
+  }
+
+  type Address {
+    id: ID!
+    label: String!
+    street: String!
+    city: String!
+    state: String!
+    country: String!
+    postalCode: String!
+    latitude: Float!
+    longitude: Float!
+    isDefault: Boolean!
+  }
+
+  type Delivery {
+    id: ID!
+    trackingNumber: String!
+    blockchainId: String
+    sender: User!
+    recipient: User
+    driver: User
+    pickupAddress: Address!
+    deliveryAddress: Address!
+    packageDetails: JSON!
+    status: DeliveryStatus!
+    scheduledPickup: DateTime
+    scheduledDelivery: DateTime
+    actualPickup: DateTime
+    actualDelivery: DateTime
+    distance: Float
+    duration: Int
+    price: Float!
+    driverEarnings: Float
+    platformFee: Float
+    insuranceAmount: Float
+    signature: String
+    photos: [String!]!
+    trackingEvents: [TrackingEvent!]!
+    currentLocation: Location
+    estimatedArrival: DateTime
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type TrackingEvent {
+    id: ID!
+    status: DeliveryStatus!
+    location: JSON!
+    description: String
+    proof: String
+    createdAt: DateTime!
+  }
+
+  type Location {
+    latitude: Float!
+    longitude: Float!
+    address: String
+    timestamp: DateTime!
+  }
+
+  type Payment {
+    id: ID!
+    delivery: Delivery!
+    amount: Float!
+    currency: String!
+    method: String!
+    status: PaymentStatus!
+    transactionId: String
+    blockchainTxHash: String
+    processedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  type AuthPayload {
+    token: String!
+    refreshToken: String!
+    user: User!
+  }
+
+  type DeliveryConnection {
+    edges: [DeliveryEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+  }
+
+  type DeliveryEdge {
+    node: Delivery!
+    cursor: String!
+  }
+
+  type PageInfo {
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+    startCursor: String
+    endCursor: String
+  }
+
+  type DeliveryStats {
+    totalDeliveries: Int!
+    completedDeliveries: Int!
+    averageDeliveryTime: Float!
+    totalRevenue: Float!
+    activeDrivers: Int!
+  }
+
+  type RouteOptimization {
+    optimizedRoute: [RouteStep!]!
+    totalDistance: Float!
+    totalDuration: Int!
+    estimatedCost: Float!
+  }
+
+  type RouteStep {
+    deliveryId: ID!
+    sequence: Int!
+    estimatedArrival: DateTime!
+    distance: Float!
+    duration: Int!
+  }
+
+  input CreateUserInput {
+    email: String!
+    phone: String
+    password: String!
+    firstName: String!
+    lastName: String!
+    role: UserRole!
+    walletAddress: String
+  }
+
+  input UpdateUserInput {
+    firstName: String
+    lastName: String
+    phone: String
+    walletAddress: String
+  }
+
+  input CreateAddressInput {
+    label: String!
+    street: String!
+    city: String!
+    state: String!
+    country: String!
+    postalCode: String!
+    latitude: Float!
+    longitude: Float!
+    isDefault: Boolean
+  }
+
+  input CreateDeliveryInput {
+    recipientEmail: String
+    recipientPhone: String
+    pickupAddressId: ID!
+    deliveryAddressId: ID!
+    packageDetails: JSON!
+    scheduledPickup: DateTime
+    scheduledDelivery: DateTime
+    priority: Int
+    insuranceAmount: Float
+  }
+
+  input UpdateDeliveryStatusInput {
+    deliveryId: ID!
+    status: DeliveryStatus!
+    location: JSON
+    proof: String
+  }
+
+  input RouteOptimizationInput {
+    driverId: ID!
+    deliveryIds: [ID!]!
+    startLocation: JSON!
+    endLocation: JSON
+  }
+
+  type Query {
+    # User queries
+    me: User
+    user(id: ID!): User
+    users(role: UserRole, page: Int, limit: Int): [User!]!
+
+    # Delivery queries
+    delivery(id: ID!): Delivery
+    deliveryByTracking(trackingNumber: String!): Delivery
+    deliveries(
+      status: DeliveryStatus
+      driverId: ID
+      senderId: ID
+      first: Int
+      after: String
+      last: Int
+      before: String
+    ): DeliveryConnection!
+    
+    # Stats queries
+    deliveryStats(startDate: DateTime, endDate: DateTime): DeliveryStats!
+    driverStats(driverId: ID!): JSON!
+    
+    # Route optimization
+    optimizeRoute(input: RouteOptimizationInput!): RouteOptimization!
+    
+    # Address queries
+    myAddresses: [Address!]!
+    nearbyDrivers(latitude: Float!, longitude: Float!, radius: Float!): [User!]!
+  }
+
+  type Mutation {
+    # Auth mutations
+    signup(input: CreateUserInput!): AuthPayload!
+    login(email: String!, password: String!): AuthPayload!
+    refreshToken(refreshToken: String!): AuthPayload!
+    logout: Boolean!
+    
+    # User mutations
+    updateProfile(input: UpdateUserInput!): User!
+    verifyEmail(token: String!): Boolean!
+    verifyPhone(code: String!): Boolean!
+    
+    # Address mutations
+    createAddress(input: CreateAddressInput!): Address!
+    updateAddress(id: ID!, input: CreateAddressInput!): Address!
+    deleteAddress(id: ID!): Boolean!
+    
+    # Delivery mutations
+    createDelivery(input: CreateDeliveryInput!): Delivery!
+    assignDriver(deliveryId: ID!, driverId: ID!): Delivery!
+    updateDeliveryStatus(input: UpdateDeliveryStatusInput!): Delivery!
+    cancelDelivery(id: ID!, reason: String!): Delivery!
+    
+    # Payment mutations
+    createPayment(deliveryId: ID!, amount: Float!, method: String!): Payment!
+    confirmPayment(paymentId: ID!, transactionId: String!): Payment!
+    
+    # Rating mutations
+    rateDelivery(deliveryId: ID!, rating: Int!, comment: String): Boolean!
+  }
+
+  type Subscription {
+    # Delivery tracking
+    deliveryUpdated(deliveryId: ID!): Delivery!
+    locationUpdated(deliveryId: ID!): Location!
+    
+    # Driver tracking
+    driverLocation(driverId: ID!): Location!
+    
+    # Notifications
+    notification(userId: ID!): JSON!
+  }
+`;

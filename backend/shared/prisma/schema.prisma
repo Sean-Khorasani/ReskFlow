@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  ADMIN
+  PARTNER
+}
+
+enum DeliveryStatus {
+  CREATED
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+enum VehicleType {
+  BICYCLE
+  MOTORCYCLE
+  CAR
+  VAN
+  TRUCK
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  phone             String?   @unique
+  password          String
+  firstName         String
+  lastName          String
+  role              UserRole
+  walletAddress     String?
+  emailVerified     Boolean   @default(false)
+  phoneVerified     Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  profile           UserProfile?
+  sentDeliveries    Delivery[] @relation("SenderDeliveries")
+  receivedDeliveries Delivery[] @relation("RecipientDeliveries")
+  driverDeliveries  Delivery[] @relation("DriverDeliveries")
+  addresses         Address[]
+  notifications     Notification[]
+  sessions          Session[]
+  
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+}
+
+model UserProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  avatar            String?
+  dateOfBirth       DateTime?
+  nationalId        String?
+  driverLicense     String?
+  vehicleType       VehicleType?
+  vehicleNumber     String?
+  bankAccount       String?
+  rating            Float     @default(0)
+  completedDeliveries Int     @default(0)
+  cancelledDeliveries Int     @default(0)
+  totalEarnings     Float     @default(0)
+  isVerified        Boolean   @default(false)
+  verifiedAt        DateTime?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+}
+
+model Address {
+  id                String    @id @default(cuid())
+  userId            String
+  label             String
+  street            String
+  city              String
+  state             String
+  country           String
+  postalCode        String
+  latitude          Float
+  longitude         Float
+  isDefault         Boolean   @default(false)
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id])
+  pickupDeliveries  Delivery[] @relation("PickupAddress")
+  deliveryAddresses Delivery[] @relation("DeliveryAddress")
+  
+  @@index([userId])
+  @@index([latitude, longitude])
+}
+
+model Delivery {
+  id                String    @id @default(cuid())
+  trackingNumber    String    @unique
+  blockchainId      String?   @unique
+  senderId          String
+  recipientId       String?
+  driverId          String?
+  pickupAddressId   String
+  deliveryAddressId String
+  packageDetails    Json
+  value             Float
+  weight            Float
+  dimensions        Json
+  status            DeliveryStatus @default(CREATED)
+  priority          Int       @default(0)
+  scheduledPickup   DateTime?
+  scheduledDelivery DateTime?
+  actualPickup      DateTime?
+  actualDelivery    DateTime?
+  distance          Float?
+  duration          Int?
+  price             Float
+  driverEarnings    Float?
+  platformFee       Float?
+  insuranceAmount   Float?
+  signature         String?
+  photos            String[]
+  ipfsHash          String?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  sender            User      @relation("SenderDeliveries", fields: [senderId], references: [id])
+  recipient         User?     @relation("RecipientDeliveries", fields: [recipientId], references: [id])
+  driver            User?     @relation("DriverDeliveries", fields: [driverId], references: [id])
+  pickupAddress     Address   @relation("PickupAddress", fields: [pickupAddressId], references: [id])
+  deliveryAddress   Address   @relation("DeliveryAddress", fields: [deliveryAddressId], references: [id])
+  trackingEvents    TrackingEvent[]
+  payments          Payment[]
+  ratings           Rating[]
+  
+  @@index([trackingNumber])
+  @@index([blockchainId])
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([driverId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TrackingEvent {
+  id                String    @id @default(cuid())
+  deliveryId        String
+  status            DeliveryStatus
+  location          Json
+  description       String?
+  proof             String?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+
+  delivery          Delivery  @relation(fields: [deliveryId], references: [id])
+  
+  @@index([deliveryId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id                String    @id @default(cuid())
+  deliveryId        String
+  amount            Float
+  currency          String    @default("USD")
+  method            String
+  status            PaymentStatus @default(PENDING)
+  transactionId     String?
+  blockchainTxHash  String?
+  escrowAddress     String?
+  metadata          Json?
+  processedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  delivery          Delivery  @relation(fields: [deliveryId], references: [id])
+  
+  @@index([deliveryId])
+  @@index([status])
+  @@index([transactionId])
+}
+
+model Rating {
+  id                String    @id @default(cuid())
+  deliveryId        String
+  raterId           String
+  ratedId           String
+  rating            Int
+  comment           String?
+  createdAt         DateTime  @default(now())
+
+  delivery          Delivery  @relation(fields: [deliveryId], references: [id])
+  
+  @@unique([deliveryId, raterId])
+  @@index([deliveryId])
+  @@index([ratedId])
+}
+
+model Notification {
+  id                String    @id @default(cuid())
+  userId            String
+  title             String
+  body              String
+  type              String
+  data              Json?
+  read              Boolean   @default(false)
+  readAt            DateTime?
+  sentAt            DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+
+  user              User      @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model Session {
+  id                String    @id @default(cuid())
+  userId            String
+  token             String    @unique
+  refreshToken      String    @unique
+  deviceId          String?
+  deviceType        String?
+  ipAddress         String?
+  userAgent         String?
+  expiresAt         DateTime
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([token])
+  @@index([refreshToken])
+}
