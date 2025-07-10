@@ -113,8 +113,3 @@ Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on our code of c
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
-
-- Documentation: [docs.reskflow.com](https://docs.reskflow.com)
-- Issues: [GitHub Issues](https://github.com/Sean-Khorasani/ReskFlow/issues)
-- Email: support@reskflow.com
