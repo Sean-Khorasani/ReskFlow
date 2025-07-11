@@ -1039,15 +1039,25 @@ graph TB
     NLB --> Pod4
     NLB --> Pod5
     
-    Service Tier --> PG_Primary
-    Service Tier --> Mongo_Primary
-    Service Tier --> Redis_Cluster
+    Pod3 --> PG_Primary
+    Pod4 --> PG_Primary
+    Pod5 --> PG_Primary
+    Pod3 --> Mongo_Primary
+    Pod4 --> Mongo_Primary
+    Pod3 --> Redis_Cluster
+    Pod4 --> Redis_Cluster
+    Pod5 --> Redis_Cluster
     
     PG_Primary -.replicate.-> PG_Replica
     Mongo_Primary -.replicate.-> Mongo_Replica
     
-    Worker Tier --> Data Tier
-    Service Tier --> S3
+    Pod6 --> PG_Primary
+    Pod6 --> Mongo_Primary
+    Pod7 --> PG_Primary
+    Pod7 --> Mongo_Primary
+    Pod3 --> S3
+    Pod4 --> S3
+    Pod5 --> S3
 ```
 
 **Description**: This deployment diagram shows a production-ready architecture with CDN, load balancing, Kubernetes orchestration, and multi-AZ database deployment. It illustrates high availability through replication and separation of concerns through node pools.
