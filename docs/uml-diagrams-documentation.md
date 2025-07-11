@@ -889,14 +889,25 @@ graph TB
         Blockchain[Blockchain RPC]
     end
     
-    Frontend Components --> Gateway
+    WebApp --> Gateway
+    MobileApp --> Gateway
+    AdminPortal --> Gateway
     Gateway --> Auth
     Gateway --> RateLimit
-    Auth --> Core Services
+    Auth --> UserMgmt
+    Auth --> OrderMgmt
+    Auth --> PaymentProc
+    Auth --> DeliveryMgmt
     
-    Core Services --> Data Stores
-    Business Services --> Data Stores
-    Infrastructure Services --> Data Stores
+    UserMgmt --> PostgreSQL
+    OrderMgmt --> PostgreSQL
+    PaymentProc --> PostgreSQL
+    DeliveryMgmt --> MongoDB
+    Merchant --> PostgreSQL
+    Catalog --> MongoDB
+    Analytics --> MongoDB
+    Search --> Elasticsearch
+    RateLimit --> Redis
     
     PaymentProc --> Stripe
     Notification --> Twilio
