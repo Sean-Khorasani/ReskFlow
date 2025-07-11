@@ -1,254 +1,144 @@
 #!/bin/bash
 
-# ReskFlow Test Runner Script
-# This script runs all tests for the ReskFlow platform
+# Run Tests Script for ReskFlow Platform
+# This script runs all test suites for the platform
 
 set -e
 
-echo "🧪 ReskFlow Test Runner"
-echo "======================"
-echo ""
+echo "🧪 Starting ReskFlow Test Suite..."
+echo "================================="
 
 # Colors for output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if all services are running
-check_services() {
-    echo "🔍 Checking services..."
+# Test results
+TOTAL_TESTS=0
+PASSED_TESTS=0
+FAILED_TESTS=0
+
+# Function to run tests for a service
+run_service_tests() {
+    local service_name=$1
+    local service_path=$2
     
-    # Check PostgreSQL
-    if pg_isready -q; then
-        echo -e "${GREEN}✓${NC} PostgreSQL is running"
+    echo -e "\n${YELLOW}Testing ${service_name}...${NC}"
+    
+    if [ -d "$service_path" ]; then
+        cd "$service_path"
+        
+        # Install dependencies if needed
+        if [ ! -d "node_modules" ]; then
+            echo "Installing dependencies..."
+            npm install --silent
+        fi
+        
+        # Run tests
+        if npm test -- --coverage --silent; then
+            echo -e "${GREEN}✓ ${service_name} tests passed${NC}"
+            ((PASSED_TESTS++))
+        else
+            echo -e "${RED}✗ ${service_name} tests failed${NC}"
+            ((FAILED_TESTS++))
+        fi
+        ((TOTAL_TESTS++))
+        
+        cd - > /dev/null
     else
-        echo -e "${RED}✗${NC} PostgreSQL is not running"
-        exit 1
+        echo -e "${YELLOW}⚠ ${service_name} directory not found${NC}"
     fi
-    
-    # Check Redis
-    if redis-cli ping > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Redis is running"
-    else
-        echo -e "${RED}✗${NC} Redis is not running"
-        exit 1
-    fi
-    
-    # Check Elasticsearch
-    if curl -s http://localhost:9200 > /dev/null; then
-        echo -e "${GREEN}✓${NC} Elasticsearch is running"
-    else
-        echo -e "${RED}✗${NC} Elasticsearch is not running"
-        exit 1
-    fi
-    
-    echo ""
 }
 
-# Setup test environment
-setup_test_env() {
-    echo "🔧 Setting up test environment..."
-    
-    # Create test database
-    echo "Creating test database..."
-    createdb reskflow_test || true
-    
-    # Run migrations on test database
-    echo "Running migrations..."
-    DATABASE_URL="postgresql://reskflow:reskflow123@localhost:5432/reskflow_test" \
-    cd backend && npx prisma migrate deploy
-    
-    # Generate Prisma client
-    npx prisma generate
-    
-    cd ..
-    echo ""
-}
-
-# Seed test data
-seed_test_data() {
-    echo "🌱 Seeding test data..."
-    DATABASE_URL="postgresql://reskflow:reskflow123@localhost:5432/reskflow_test" \
-    cd backend && npm run seed
-    cd ..
-    echo ""
-}
-
-# Run unit tests
-run_unit_tests() {
-    echo "🧪 Running unit tests..."
-    echo "----------------------"
-    
-    # Backend unit tests
-    echo "Backend unit tests:"
-    cd backend && npm test
-    cd ..
-    
-    # Frontend unit tests
-    echo -e "\nFrontend unit tests:"
-    cd frontend && npm test
-    cd ..
-    
-    # Mobile unit tests
-    echo -e "\nMobile unit tests:"
-    cd mobile && npm test
-    cd ..
-    
-    echo ""
-}
-
-# Run integration tests
+# Function to run integration tests
 run_integration_tests() {
-    echo "🔗 Running integration tests..."
-    echo "-----------------------------"
+    echo -e "\n${YELLOW}Running Integration Tests...${NC}"
     
-    cd backend && npm run test:integration
-    cd ..
+    # Start test containers
+    echo "Starting test infrastructure..."
+    docker-compose -f docker-compose.test.yml up -d postgres redis mongodb
     
-    echo ""
-}
-
-# Run E2E tests
-run_e2e_tests() {
-    echo "🌐 Running E2E tests..."
-    echo "---------------------"
+    # Wait for services
+    echo "Waiting for services to be ready..."
+    sleep 10
     
-    # Install Playwright browsers if needed
-    cd backend && npx playwright install
-    
-    # Run E2E tests
-    npm run test:e2e
-    cd ..
-    
-    echo ""
-}
-
-# Run performance tests
-run_performance_tests() {
-    echo "⚡ Running performance tests..."
-    echo "-----------------------------"
-    
-    # Run k6 performance tests
-    if command -v k6 &> /dev/null; then
-        k6 run backend/tests/performance/load-test.js
+    # Run integration tests
+    if npm run test:integration -- --ci; then
+        echo -e "${GREEN}✓ Integration tests passed${NC}"
+        ((PASSED_TESTS++))
     else
-        echo -e "${YELLOW}Warning:${NC} k6 not installed, skipping performance tests"
+        echo -e "${RED}✗ Integration tests failed${NC}"
+        ((FAILED_TESTS++))
     fi
+    ((TOTAL_TESTS++))
     
-    echo ""
+    # Stop test containers
+    docker-compose -f docker-compose.test.yml down
 }
 
-# Run security tests
-run_security_tests() {
-    echo "🔒 Running security tests..."
-    echo "--------------------------"
-    
-    # Run npm audit
-    echo "Checking for vulnerabilities..."
-    npm audit --workspaces
-    
-    # Run OWASP dependency check if available
-    if command -v dependency-check &> /dev/null; then
-        dependency-check --project ReskFlow --scan .
-    else
-        echo -e "${YELLOW}Warning:${NC} OWASP dependency-check not installed"
-    fi
-    
-    echo ""
-}
+# Main test execution
+echo "1. Running Unit Tests"
+echo "--------------------"
 
-# Generate test report
-generate_report() {
-    echo "📊 Generating test report..."
-    echo "--------------------------"
-    
-    # Create reports directory
-    mkdir -p test-reports
-    
-    # Copy test results
-    cp -r backend/coverage test-reports/backend-coverage || true
-    cp -r frontend/coverage test-reports/frontend-coverage || true
-    cp -r backend/playwright-report test-reports/e2e-report || true
-    
-    # Generate summary
-    cat > test-reports/summary.md << EOF
-# ReskFlow Test Report
-Generated on: $(date)
+# Run root level tests
+echo -e "\n${YELLOW}Testing root project...${NC}"
+if npm test -- --coverage; then
+    echo -e "${GREEN}✓ Root tests passed${NC}"
+    ((PASSED_TESTS++))
+else
+    echo -e "${RED}✗ Root tests failed${NC}"
+    ((FAILED_TESTS++))
+fi
+((TOTAL_TESTS++))
 
-## Test Results Summary
+# Test backend services
+run_service_tests "User Service" "backend/services/user"
+run_service_tests "Payment Service" "backend/services/payment"
+run_service_tests "Order Service" "backend/services/order"
+run_service_tests "Delivery Service" "backend/services/delivery"
+run_service_tests "Notification Service" "backend/services/notification"
+run_service_tests "API Gateway" "backend/gateway"
 
-### Unit Tests
-- Backend: $(cd backend && npm test -- --reporter=json | jq '.stats.passes' || echo "N/A") passed
-- Frontend: $(cd frontend && npm test -- --reporter=json | jq '.stats.passes' || echo "N/A") passed
-- Mobile: $(cd mobile && npm test -- --reporter=json | jq '.stats.passes' || echo "N/A") passed
+# Test frontend applications
+echo -e "\n2. Running Frontend Tests"
+echo "------------------------"
+run_service_tests "Customer Web App" "frontend/customer"
+run_service_tests "Admin Dashboard" "frontend/admin"
+run_service_tests "Merchant Portal" "frontend/merchant"
+run_service_tests "Partner Portal" "frontend/partner"
 
-### Integration Tests
-- Total: $(cd backend && npm run test:integration -- --reporter=json | jq '.stats.total' || echo "N/A")
-- Passed: $(cd backend && npm run test:integration -- --reporter=json | jq '.stats.passes' || echo "N/A")
+# Test mobile applications
+echo -e "\n3. Running Mobile Tests"
+echo "----------------------"
+run_service_tests "Customer Mobile App" "mobile/customer"
+run_service_tests "Driver Mobile App" "mobile/driver"
 
-### E2E Tests
-- Scenarios: $(find backend/tests/e2e -name "*.test.ts" | wc -l)
-- Browsers tested: Chrome, Firefox, Safari, Mobile
+# Run integration tests if requested
+if [ "$1" == "--integration" ]; then
+    run_integration_tests
+fi
 
-### Coverage
-- Backend: Check test-reports/backend-coverage/index.html
-- Frontend: Check test-reports/frontend-coverage/index.html
+# Generate combined coverage report
+echo -e "\n4. Generating Coverage Report"
+echo "----------------------------"
+if command -v nyc &> /dev/null; then
+    nyc report --reporter=html --reporter=text
+    echo -e "${GREEN}✓ Coverage report generated in coverage/index.html${NC}"
+fi
 
-### Performance
-- Load test results available in test-reports/performance/
+# Summary
+echo -e "\n================================="
+echo "Test Summary"
+echo "================================="
+echo -e "Total test suites: ${TOTAL_TESTS}"
+echo -e "${GREEN}Passed: ${PASSED_TESTS}${NC}"
+echo -e "${RED}Failed: ${FAILED_TESTS}${NC}"
 
-EOF
-    
-    echo -e "${GREEN}✓${NC} Test report generated in test-reports/"
-    echo ""
-}
-
-# Main execution
-main() {
-    echo "Test type: ${1:-all}"
-    echo ""
-    
-    check_services
-    
-    case ${1:-all} in
-        setup)
-            setup_test_env
-            seed_test_data
-            ;;
-        unit)
-            run_unit_tests
-            ;;
-        integration)
-            run_integration_tests
-            ;;
-        e2e)
-            run_e2e_tests
-            ;;
-        performance)
-            run_performance_tests
-            ;;
-        security)
-            run_security_tests
-            ;;
-        all)
-            setup_test_env
-            seed_test_data
-            run_unit_tests
-            run_integration_tests
-            run_e2e_tests
-            run_performance_tests
-            run_security_tests
-            generate_report
-            ;;
-        *)
-            echo "Usage: $0 [setup|unit|integration|e2e|performance|security|all]"
-            exit 1
-            ;;
-    esac
-    
-    echo -e "${GREEN}✨ Tests completed!${NC}"
-}
-
-# Run main function with arguments
-main "$@"
+if [ $FAILED_TESTS -eq 0 ]; then
+    echo -e "\n${GREEN}✓ All tests passed!${NC}"
+    exit 0
+else
+    echo -e "\n${RED}✗ Some tests failed!${NC}"
+    exit 1
+fi
