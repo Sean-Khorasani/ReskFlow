@@ -24,7 +24,7 @@
 
 ## Executive Summary
 
-The ReskFlow is a cutting-edge, microservices-based delivery management system that leverages blockchain technology for transparency, security, and minimal transaction costs. Built to compete with industry leaders like FedEx, UPS, DHL, and food delivery services like Uber Eats and DoorDash.
+The ReskFlow is a cutting-edge, microservices-based delivery management system that leverages blockchain technology for transparency, security, and minimal transaction costs.
 
 ### Key Features
 - **Blockchain Integration**: Polygon-based smart contracts with <$0.01 gas fees

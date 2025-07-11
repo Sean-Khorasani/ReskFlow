@@ -1,6 +1,6 @@
 # ReskFlow
 
-A cutting-edge enterprise delivery platform leveraging blockchain technology for transparency, security, and minimal transaction costs. Built to compete with industry leaders like FedEx, UPS, and DHL.
+A cutting-edge enterprise delivery platform leveraging blockchain technology for transparency, security, and minimal transaction costs.
 
 ## Key Features
 
