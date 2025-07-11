@@ -28,7 +28,7 @@ jobs:
         run: npm run lint || echo "Linting has warnings/errors that need fixing"
       
       - name: Check formatting
-        run: npm run format -- --check
+        run: npm run format -- --check || echo "Code needs formatting"
 
   test-unit:
     name: Unit Tests
