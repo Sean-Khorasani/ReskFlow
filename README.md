@@ -107,7 +107,7 @@ API documentation is available at `http://localhost:3000/docs` when running loca
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Please read [CONTRIBUTING.md](docs/contributing.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
