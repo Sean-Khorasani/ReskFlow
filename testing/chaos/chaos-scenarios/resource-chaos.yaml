@@ -1,0 +1,276 @@
+# Resource Chaos Scenarios for ReskFlow
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: resource-chaos-suite
+  namespace: reskflow
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "pods/exec", "events"]
+        verbs: ["create", "list", "get", "patch", "update", "delete"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "list", "get", "delete", "deletecollection"]
+    image: "litmuschaos/go-runner:latest"
+    labels:
+      name: resource-chaos-suite
+      app.kubernetes.io/part-of: litmus
+---
+# Scenario 1: Memory Pressure on Order Service
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: order-service-memory-pressure
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=order-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-memory-hog
+      spec:
+        components:
+          env:
+            - name: MEMORY_CONSUMPTION
+              value: '800' # 800MB
+            - name: TOTAL_CHAOS_DURATION
+              value: '300' # 5 minutes
+            - name: CHAOS_KILL_COMMAND
+              value: "kill -9 $(ps afx | grep \"[dd] if=/dev/zero\" | awk '{print $1}')"
+            - name: PODS_AFFECTED_PERC
+              value: '50'
+        probe:
+          - name: check-memory-usage
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "container_memory_usage_bytes{pod=~'order-service.*'} / container_spec_memory_limit_bytes{pod=~'order-service.*'}"
+              comparator:
+                type: float
+                criteria: "<"
+                value: "0.95" # Memory usage should not exceed 95%
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+          - name: check-service-health
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://order-service:3002/health"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 5
+              interval: 15
+              retry: 3
+---
+# Scenario 2: CPU Stress on Payment Service
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: payment-service-cpu-stress
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=payment-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-cpu-hog
+      spec:
+        components:
+          env:
+            - name: CPU_CORES
+              value: '2'
+            - name: CPU_LOAD
+              value: '80' # 80% CPU load
+            - name: TOTAL_CHAOS_DURATION
+              value: '240' # 4 minutes
+            - name: PODS_AFFECTED_PERC
+              value: '100'
+        probe:
+          - name: check-payment-processing-time
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "histogram_quantile(0.95, rate(payment_processing_duration_seconds_bucket[5m]))"
+              comparator:
+                type: float
+                criteria: "<"
+                value: "3" # 95th percentile should be under 3 seconds
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+          - name: check-payment-success-rate
+            type: promProbe
+            mode: EOT
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "sum(rate(payment_transactions_total{status='success'}[5m])) / sum(rate(payment_transactions_total[5m]))"
+              comparator:
+                type: float
+                criteria: ">"
+                value: "0.95" # Success rate should be above 95%
+            runProperties:
+              probeTimeout: 10
+              retry: 3
+---
+# Scenario 3: Disk I/O Stress
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: database-disk-stress
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=postgresql'
+    appkind: 'statefulset'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-io-stress
+      spec:
+        components:
+          env:
+            - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+              value: '80'
+            - name: FILESYSTEM_UTILIZATION_BYTES
+              value: '2147483648' # 2GB
+            - name: NUMBER_OF_WORKERS
+              value: '4'
+            - name: TOTAL_CHAOS_DURATION
+              value: '180' # 3 minutes
+            - name: POD_AFFECTED_PERCENTAGE
+              value: '33' # Affect 1 out of 3 replicas
+            - name: VOLUME_MOUNT_PATH
+              value: '/var/lib/postgresql/data'
+        probe:
+          - name: check-database-response-time
+            type: cmdProbe
+            mode: Continuous
+            cmdProbe/inputs:
+              command: |
+                time psql -h postgresql-service -U postgres -c "SELECT 1;" 2>&1 | grep real | awk '{print $2}' | sed 's/[ms]//g'
+              comparator:
+                type: float
+                criteria: "<"
+                value: "100" # Query should complete within 100ms
+            runProperties:
+              probeTimeout: 5
+              interval: 20
+              retry: 3
+---
+# Scenario 4: Container Kill
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: random-container-kill
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'tier=backend'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: container-kill
+      spec:
+        components:
+          env:
+            - name: TARGET_CONTAINER
+              value: ''  # Empty means random container
+            - name: CHAOS_INTERVAL
+              value: '60'
+            - name: TOTAL_CHAOS_DURATION
+              value: '300'
+            - name: FORCE
+              value: 'false'
+            - name: SIGNAL
+              value: 'SIGTERM'
+        probe:
+          - name: check-service-availability
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "up{namespace='reskflow'}"
+              comparator:
+                type: int
+                criteria: ">="
+                value: "10" # At least 10 services should be up
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+---
+# Scenario 5: Resource Limits Testing
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: resource-limits-test
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=tracking-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-resource-limit
+      spec:
+        components:
+          env:
+            - name: CPU_LIMIT
+              value: '100m' # Reduce CPU limit to 100 millicores
+            - name: MEMORY_LIMIT
+              value: '128Mi' # Reduce memory limit to 128MB
+            - name: TOTAL_CHAOS_DURATION
+              value: '300'
+            - name: PODS_AFFECTED_PERC
+              value: '50'
+        probe:
+          - name: check-tracking-functionality
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://tracking-service:3006/api/tracking/test-order"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 5
+          - name: check-oom-kills
+            type: promProbe
+            mode: EOT
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "increase(container_oom_events_total{namespace='reskflow'}[5m])"
+              comparator:
+                type: int
+                criteria: "=="
+                value: "0" # No OOM kills should occur
+            runProperties:
+              probeTimeout: 10
+              retry: 3

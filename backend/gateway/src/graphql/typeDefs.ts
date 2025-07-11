@@ -1,14 +1,20 @@
 import { gql } from 'apollo-server-express';
+import { customerTypeDefs } from './typeDefs/customer.typeDefs';
+import { driverTypeDefs } from './typeDefs/driver.typeDefs';
+import { merchantTypeDefs } from './typeDefs/merchant.typeDefs';
+import { adminTypeDefs } from './typeDefs/admin.typeDefs';
 
-export const typeDefs = gql`
+const baseTypeDefs = gql`
   scalar DateTime
   scalar JSON
+  scalar Upload
 
   enum UserRole {
     CUSTOMER
     DRIVER
     ADMIN
     PARTNER
+    MERCHANT
   }
 
   enum DeliveryStatus {
@@ -160,6 +166,116 @@ export const typeDefs = gql`
     hasPreviousPage: Boolean!
     startCursor: String
     endCursor: String
+  }
+
+  # Base types for new features
+  type Order {
+    id: ID!
+    customerId: ID!
+    customer: User!
+    merchantId: ID!
+    merchant: Merchant!
+    items: [OrderItem!]!
+    totalAmount: Float!
+    status: String!
+    createdAt: DateTime!
+  }
+
+  type OrderItem {
+    id: ID!
+    menuItemId: ID!
+    name: String!
+    quantity: Int!
+    price: Float!
+  }
+
+  type Merchant {
+    id: ID!
+    name: String!
+    description: String
+    logo: String
+    address: Address!
+    rating: Float!
+    isActive: Boolean!
+  }
+
+  type Driver {
+    id: ID!
+    user: User!
+    vehicle: Vehicle!
+    isOnline: Boolean!
+    currentLocation: Location
+  }
+
+  type Vehicle {
+    id: ID!
+    type: VehicleType!
+    make: String!
+    model: String!
+    year: Int!
+    licensePlate: String!
+  }
+
+  type MenuItem {
+    id: ID!
+    merchantId: ID!
+    name: String!
+    description: String
+    price: Float!
+    category: String!
+    isAvailable: Boolean!
+  }
+
+  type Menu {
+    id: ID!
+    merchantId: ID!
+    name: String!
+    items: [MenuItem!]!
+  }
+
+  type CartItem {
+    menuItem: MenuItem!
+    quantity: Int!
+    customizations: [String!]
+  }
+
+  input CartItemInput {
+    menuItemId: ID!
+    quantity: Int!
+    customizations: [String!]
+  }
+
+  input AddressInput {
+    label: String!
+    street: String!
+    city: String!
+    state: String!
+    country: String!
+    postalCode: String!
+    latitude: Float!
+    longitude: Float!
+  }
+
+  type OperatingHours {
+    dayOfWeek: Int!
+    openTime: String!
+    closeTime: String!
+  }
+
+  input OperatingHoursInput {
+    dayOfWeek: Int!
+    openTime: String!
+    closeTime: String!
+  }
+
+  input NutritionInfoInput {
+    calories: Int
+    protein: Float
+    carbs: Float
+    fat: Float
+    sodium: Float
+    sugar: Float
+    fiber: Float
   }
 
   type DeliveryStats {
@@ -314,3 +430,12 @@ export const typeDefs = gql`
     notification(userId: ID!): JSON!
   }
 `;
+
+// Combine all type definitions
+export const typeDefs = [
+  baseTypeDefs,
+  customerTypeDefs,
+  driverTypeDefs,
+  merchantTypeDefs,
+  adminTypeDefs
+];
