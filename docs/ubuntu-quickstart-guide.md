@@ -315,86 +315,62 @@ sudo systemctl start reskflow-backend reskflow-frontend
 
 ## Accessing Different Roles
 
-### 1. Admin Portal
+> ⚠️ **Important Note**: The platform is in early development. Not all features are fully implemented. See [Implementation Status](IMPLEMENTATION_STATUS.md) for details.
+
+### 1. Admin Portal ✅ (Working)
 - **URL**: http://localhost:3000/admin
 - **Default Login**: 
   - Email: admin@localhost
   - Password: Admin123!
-- **Features**:
+- **Working Features**:
   - Dashboard with system metrics
-  - User management
-  - Order monitoring
-  - System configuration
-  - Reports and analytics
+  - Real-time statistics
+  - Revenue charts
+  - Platform monitoring
 
-### 2. Customer Web App
-- **URL**: http://localhost:3000
-- **Registration**: Click "Sign Up" to create a new customer account
-- **Features**:
-  - Browse products/services
-  - Place orders
-  - Track deliveries
-  - Order history
-  - Profile management
+### 2. Customer Web App ❌ (Not Implemented)
+- **Status**: Not yet implemented
+- **Alternative**: Customer mobile app has basic home screen only
+- **Note**: Cannot place orders in current version
 
-### 3. Merchant Portal
+### 3. Merchant Portal ✅ (Partially Working)
 - **URL**: http://localhost:3000/merchant
-- **Onboarding Process**:
-  1. Click "Become a Merchant"
-  2. Fill business information
-  3. Wait for admin approval (or auto-approve in dev mode)
-- **Features**:
-  - Product/service management
-  - Order management
-  - Inventory tracking
-  - Sales analytics
-  - Payment reports
+- **Status**: Basic order management works
+- **Working Features**:
+  - View orders
+  - Change order status
+  - Sound alerts
+- **Missing**: Product management, analytics
 
-### 4. Driver App
-- **URL**: http://localhost:3000/driver
-- **Onboarding Process**:
-  1. Click "Become a Driver"
-  2. Submit required documents (ID, license)
-  3. Complete background check form
-  4. Wait for approval
-- **Features**:
-  - Accept/reject deliveries
-  - Route navigation
-  - Delivery status updates
-  - Earnings tracking
-  - Schedule management
+### 4. Driver App ⚠️ (Minimal Implementation)
+- **URL**: Mobile app only (React Native)
+- **Working Features**:
+  - Home screen
+  - Online/offline toggle
+  - View statistics
+- **Missing**: Cannot accept or complete deliveries
 
 ---
 
 ## Testing Workflows
 
-### Complete Order Flow Test
+### ⚠️ Current Limitations
 
-#### 1. Set Up Test Merchant
-```bash
-# Access admin portal
-# Navigate to Merchants > Add New
-# Create a test restaurant/store
-# Add sample products
-```
+Due to incomplete implementation, a full end-to-end order flow is **not currently possible**. Here's what you can test:
 
-#### 2. Create Customer Order
-```bash
-# Access customer app
-# Sign up as new customer
-# Browse merchant catalog
-# Add items to cart
-# Complete checkout
-```
+#### What Works:
+1. **Admin Dashboard**: View statistics and monitoring
+2. **Merchant Dashboard**: View and manage order status (if orders exist in database)
+3. **Mobile Home Screens**: View basic UI for customer and driver apps
 
-#### 3. Driver Delivery
-```bash
-# Access driver app
-# Go online
-# Accept incoming order
-# Mark as picked up
-# Complete delivery
-```
+#### What Doesn't Work:
+1. **Customer Cannot**: Browse products, add to cart, or place orders
+2. **Driver Cannot**: Accept deliveries or complete delivery flow
+3. **No Integration**: Orders don't flow between customer → merchant → driver
+
+### Demo Data Setup
+
+To see the dashboards with data, you can manually insert test data into the database:
 
 ### Quick Test Script
 ```bash

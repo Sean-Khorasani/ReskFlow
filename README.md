@@ -2,6 +2,8 @@
 
 A cutting-edge enterprise delivery platform leveraging blockchain technology for transparency, security, and minimal transaction costs.
 
+> ⚠️ **Development Status**: This platform is in early development. Core backend services are implemented, but frontend applications are incomplete. See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) for details.
+
 ## Key Features
 
 - **Blockchain Integration**: Polygon-based smart contracts with <$0.01 gas fees
