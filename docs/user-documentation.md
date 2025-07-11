@@ -1201,7 +1201,7 @@ We're excited to announce the official launch of the ReskFlow!
 **Available 24/7**
 
 - **In-App Chat**: Fastest response
-- **Email**: support@ReskFlow.com
+- **Email**: shahin@resket.ca
 - **Phone**: 1-800-DELIVER (1-800-335-4837)
 - **Help Center**: https://help.ReskFlow.com
 
@@ -1215,7 +1215,7 @@ We're excited to announce the official launch of the ReskFlow!
 **Hours**: Monday-Sunday, 6 AM - 11 PM EST
 
 - **Merchant Hotline**: 1-800-MERCHANT
-- **Email**: merchants@ReskFlow.com
+- **Email**: shahin@resket.ca
 - **Portal**: Merchant dashboard → Support
 
 **Dedicated Support For**:
@@ -1230,7 +1230,7 @@ We're excited to announce the official launch of the ReskFlow!
 
 - **Driver Hotline**: 1-800-DRIVERS
 - **In-App Support**: Profile → Help
-- **Email**: drivers@ReskFlow.com
+- **Email**: shahin@resket.ca
 
 **Emergency Support**: 24/7 for safety issues
 
@@ -1238,8 +1238,8 @@ We're excited to announce the official launch of the ReskFlow!
 
 We value your input!
 
-- **Feature Requests**: feedback@ReskFlow.com
-- **Bug Reports**: bugs@ReskFlow.com
+- **Feature Requests**: shahin@resket.ca
+- **Bug Reports**: shahin@resket.ca
 - **General Feedback**: In-app feedback form
 
 ### Legal Information
@@ -1250,10 +1250,10 @@ We value your input!
 
 ### Business Inquiries
 
-- **Partnerships**: partnerships@ReskFlow.com
-- **Investor Relations**: investors@ReskFlow.com
-- **Media Inquiries**: press@ReskFlow.com
-- **Corporate Orders**: corporate@ReskFlow.com
+- **Partnerships**: shahin@resket.ca
+- **Investor Relations**: shahin@resket.ca
+- **Media Inquiries**: shahin@resket.ca
+- **Corporate Orders**: shahin@resket.ca
 
 ### Office Locations
 

@@ -1638,4 +1638,4 @@ enum Allergen {
 
 ---
 
-*This document is maintained by the Data Architecture Team. For questions or updates, please contact data@ReskFlow.com*
+*For questions or updates, please contact shahin@resket.ca*

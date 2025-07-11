@@ -1300,4 +1300,4 @@ curl -X POST https://sandbox-api.ReskFlow.com/test/webhooks \
 
 ---
 
-*For additional support, contact api-support@ReskFlow.com*
+*For additional support, contact shahin@resket.ca*

@@ -1871,4 +1871,4 @@ data_retention:
 
 ---
 
-*This Security Documentation is maintained by the Security Team. For security concerns, contact security@ReskFlow.com*
+*For security concerns, contact shahin@resket.ca*

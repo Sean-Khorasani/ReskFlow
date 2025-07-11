@@ -566,7 +566,7 @@ sop_gdpr_request:
   procedure:
     1_receive_request:
       channels:
-        - Email: privacy@ReskFlow.com
+        - Email: shahin@resket.ca
         - Portal: Account settings
         - Support: Ticket system
       
@@ -1773,7 +1773,7 @@ change_communication:
         What you need to do:
         - {customer_actions}
         
-        Questions? Contact support@ReskFlow.com
+        Questions? Contact shahin@resket.ca
   
   feature_releases:
     channels:
@@ -1846,4 +1846,4 @@ curl -s http://localhost:9090/metrics            # Prometheus metrics
 
 ---
 
-*This Process Documentation is maintained by the Operations Team. For updates or corrections, please contact operations@ReskFlow.com*
+*For updates or corrections, please contact shahin@resket.ca*

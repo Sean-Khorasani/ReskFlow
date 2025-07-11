@@ -1292,4 +1292,4 @@ graph TB
 
 ---
 
-*This UML documentation is maintained by the Architecture Team. For updates or corrections, please contact architecture@ReskFlow.com*
+*For updates or corrections, please contact shahin@resket.ca*

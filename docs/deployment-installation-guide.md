@@ -1325,8 +1325,8 @@ sudo ufw enable
 # Configure email alerts
 pm2 set pm2-health:smtp_host smtp.gmail.com
 pm2 set pm2-health:smtp_port 587
-pm2 set pm2-health:mail_from alerts@ReskFlow.com
-pm2 set pm2-health:mail_to ops@ReskFlow.com
+pm2 set pm2-health:mail_from shahin@resket.ca
+pm2 set pm2-health:mail_to shahin@resket.ca
 ```
 
 ### 4. Documentation
@@ -1337,4 +1337,4 @@ pm2 set pm2-health:mail_to ops@ReskFlow.com
 
 ---
 
-*For additional support, contact platform-support@ReskFlow.com*
+*For additional support, contact shahin@resket.ca*

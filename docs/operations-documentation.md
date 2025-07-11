@@ -1920,4 +1920,4 @@ emergency_contacts:
 
 ---
 
-*This Operations Documentation is maintained by the Operations Team. For updates or corrections, please contact operations@ReskFlow.com*
+*For updates or corrections, please contact shahin@resket.ca*

@@ -657,4 +657,4 @@ Common metrics exposed by all services:
 
 ---
 
-*This document is maintained by the Platform Architecture Team. For questions or updates, please contact architecture@ReskFlow.com*
+*For questions or updates, please contact shahin@resket.ca*
