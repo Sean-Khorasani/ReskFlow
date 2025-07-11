@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: reskflow-test-postgres
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: reskflow_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - test-network
+
+  # Test Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: reskflow-test-redis
+    command: redis-server --appendonly no
+    ports:
+      - "6380:6379"
+    tmpfs:
+      - /data
+    networks:
+      - test-network
+
+  # Test MongoDB
+  mongodb:
+    image: mongo:7
+    container_name: reskflow-test-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: test
+      MONGO_INITDB_ROOT_PASSWORD: test
+      MONGO_INITDB_DATABASE: reskflow_test
+    ports:
+      - "27018:27017"
+    tmpfs:
+      - /data/db
+    networks:
+      - test-network
+
+  # Test Elasticsearch (optional, for search tests)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: reskflow-test-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
+    ports:
+      - "9201:9200"
+    tmpfs:
+      - /usr/share/elasticsearch/data
+    networks:
+      - test-network
+
+  # Test RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: reskflow-test-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
+    ports:
+      - "5673:5672"
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
