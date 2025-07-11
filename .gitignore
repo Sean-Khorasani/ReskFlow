@@ -106,3 +106,12 @@ ENV/
 *.pid.lock
 .yarn/
 .pnp.*
+
+# Internal documents
+IMPLEMENTATION_SUMMARY.md
+enterprise-delivery-application-requirements-analysis.md
+requirements.md
+reskflow_features_analysis.md
+PRODUCTION_DEPLOYMENT_GUIDE.md
+*_internal.md
+*_analysis.md
