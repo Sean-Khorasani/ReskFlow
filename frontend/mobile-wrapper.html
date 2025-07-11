@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ReskFlow Mobile</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .mobile-container {
+            max-width: 428px;
+            margin: 0 auto;
+            height: 100vh;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .status-bar {
+            background: #000;
+            color: white;
+            padding: 8px 20px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .app-frame {
+            width: 100%;
+            height: calc(100vh - 32px);
+            border: none;
+        }
+        
+        .app-selector {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            z-index: 1000;
+        }
+        
+        .app-selector h1 {
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .app-buttons {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .app-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+        
+        .app-button:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .app-button.driver {
+            background: #34C759;
+        }
+        
+        .app-button.driver:hover {
+            background: #28a745;
+        }
+        
+        .app-button.merchant {
+            background: #FF9500;
+        }
+        
+        .app-button.merchant:hover {
+            background: #e68a00;
+        }
+        
+        .app-button.admin {
+            background: #AF52DE;
+        }
+        
+        .app-button.admin:hover {
+            background: #9b3bc7;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .back-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            z-index: 999;
+        }
+        
+        @media (min-width: 768px) {
+            body {
+                background: #e0e0e0;
+                padding: 20px;
+            }
+            
+            .mobile-container {
+                height: calc(100vh - 40px);
+                border-radius: 20px;
+                overflow: hidden;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-container">
+        <div class="status-bar">
+            <span id="time">12:00</span>
+            <span>ReskFlow</span>
+            <span>100%</span>
+        </div>
+        
+        <div class="app-selector" id="appSelector">
+            <h1>Select Your Role</h1>
+            <div class="app-buttons">
+                <button class="app-button" onclick="loadApp('/')">Customer</button>
+                <button class="app-button driver" onclick="loadApp('/driver')">Driver</button>
+                <button class="app-button merchant" onclick="loadApp('/merchant')">Merchant</button>
+                <button class="app-button admin" onclick="loadApp('/admin')">Admin</button>
+            </div>
+        </div>
+        
+        <iframe id="appFrame" class="app-frame hidden" src=""></iframe>
+        
+        <button class="back-button hidden" id="backButton" onclick="showSelector()">
+            Switch Role
+        </button>
+    </div>
+    
+    <script>
+        // Update time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time').textContent = 
+                now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+        
+        // App loading
+        function loadApp(path) {
+            const selector = document.getElementById('appSelector');
+            const frame = document.getElementById('appFrame');
+            const backButton = document.getElementById('backButton');
+            
+            selector.classList.add('hidden');
+            frame.classList.remove('hidden');
+            backButton.classList.remove('hidden');
+            
+            frame.src = 'http://localhost:3000' + path;
+        }
+        
+        function showSelector() {
+            const selector = document.getElementById('appSelector');
+            const frame = document.getElementById('appFrame');
+            const backButton = document.getElementById('backButton');
+            
+            selector.classList.remove('hidden');
+            frame.classList.add('hidden');
+            backButton.classList.add('hidden');
+            
+            frame.src = '';
+        }
+        
+        // Handle deep linking
+        const hash = window.location.hash.substring(1);
+        if (hash) {
+            loadApp('/' + hash);
+        }
+    </script>
+</body>
+</html>

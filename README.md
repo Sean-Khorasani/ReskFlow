@@ -29,6 +29,18 @@ A cutting-edge enterprise delivery platform leveraging blockchain technology for
 
 ### Installation
 
+#### Option 1: Automated Ubuntu Setup
+For Ubuntu users with minimal systems (1GB RAM):
+```bash
+wget https://raw.githubusercontent.com/Sean-Khorasani/ReskFlow/main/scripts/ubuntu-setup.sh
+chmod +x ubuntu-setup.sh
+./ubuntu-setup.sh
+```
+
+See [Ubuntu Quick Start Guide](docs/ubuntu-quickstart-guide.md) for detailed instructions.
+
+#### Option 2: Manual Installation
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/Sean-Khorasani/ReskFlow.git
