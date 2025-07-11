@@ -618,7 +618,6 @@ sequenceDiagram
         alt Confirmed (6+ blocks)
             BC->>PS: Payment confirmed
             PS->>MS: Notify payment received
-            break
         else Not confirmed
             BC->>BC: Wait for next block
         end
