@@ -387,8 +387,7 @@ class KeyManagementService {
 | Classification | Description | Security Requirements |
 |----------------|-------------|----------------------|
 | Public | Non-sensitive public data | Basic encryption in transit |
-| Internal | Internal business data | Encryption at rest and in transit |
-| Confidential | Customer PII, payment data | Field-level encryption, access logging |
+| Sensitive | Customer PII, payment data | Field-level encryption, access logging |
 | Restricted | Cryptographic keys, passwords | HSM storage, strict access control |
 
 ### Data Loss Prevention (DLP)
@@ -1404,8 +1403,8 @@ controls:
       evidence: "/docs/security-handbook.pdf"
     
   CC2: # Communication and Information
-    - description: "Security awareness training"
-      implementation: "Quarterly security training for all employees"
+    - description: "Security awareness program"
+      implementation: "Regular security training program"
       evidence: "Training completion records"
     
   CC3: # Risk Assessment

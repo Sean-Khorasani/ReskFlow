@@ -24,7 +24,7 @@
 
 ## Overview
 
-This Process Documentation provides detailed workflows, standard operating procedures, and troubleshooting guides for the ReskFlow. It serves as a comprehensive reference for development teams, operations staff, and support personnel.
+This Process Documentation provides detailed workflows, standard operating procedures, and troubleshooting guides for the ReskFlow platform.
 
 ### Document Purpose
 
@@ -1500,7 +1500,7 @@ security_incident_response:
         - Verify the incident
         - Assess severity
         - Start incident timer
-        - Notify security team
+        - Initiate security response
     
     2_containment:
       immediate:
@@ -1713,7 +1713,7 @@ incident_communication:
       messaging:
         acknowledge: |
           We're aware of an issue affecting {service}.
-          Our team is investigating.
+          Investigation is underway.
           Updates: {status_page_url}
         
         update: |

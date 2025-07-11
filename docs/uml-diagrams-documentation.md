@@ -1292,14 +1292,5 @@ graph TB
    - Website: https://app.diagrams.net
    - Usage: Create and export diagrams
 
-### Best Practices
-
-1. **Keep diagrams simple**: Focus on key relationships
-2. **Use consistent notation**: Follow UML standards
-3. **Version control**: Store diagram source files
-4. **Update regularly**: Keep diagrams in sync with code
-5. **Document assumptions**: Note any simplifications
-
----
-
+#
 *For updates or corrections, please contact shahin@resket.ca*

@@ -690,10 +690,9 @@ crisis_team:
       - Major security incident
     
     notification_chain:
-      1: Automated alerts to on-call
-      2: On-call escalates to team lead
-      3: Team lead activates crisis team
-      4: Crisis team assembles virtually
+      1: Automated alerts triggered
+      2: Incident response initiated
+      3: Resolution process begins
 ```
 
 ### Communication Plan
@@ -709,7 +708,6 @@ communication_plan:
     updates:
       frequency: Every 30 minutes
       format: Structured status update
-      recipients: All staff
   
   external:
     customers:
@@ -1769,19 +1767,16 @@ documentation:
       location: /docs/architecture
       format: Markdown + diagrams
       review: Quarterly
-      owner: Architecture team
     
     operations:
       location: /docs/operations
       format: Runbooks
       review: Monthly
-      owner: Operations team
     
     api:
       location: /docs/api
       format: OpenAPI 3.0
       review: Per release
-      owner: Development team
     
     user:
       location: /docs/user
@@ -1851,13 +1846,13 @@ emergency_contacts:
 ### 🔒 Security Breach
 1. Isolate affected systems: `./isolate-systems.sh`
 2. Preserve evidence: `./capture-forensics.sh`
-3. Contact security team: Page security-oncall
+3. Initiate security response procedures
 4. Initiate IR plan: Follow SEC-001 runbook
 
 ### 💳 Payment System Failure
 1. Enable payment queue: `./enable-payment-queue.sh`
 2. Switch payment provider: `./switch-payment-provider.sh`
-3. Notify finance team: Email finance-alerts@
+3. Initiate payment recovery procedures
 4. Monitor queue depth: Watch payment-queue dashboard
 
 ### 📊 Database Corruption
