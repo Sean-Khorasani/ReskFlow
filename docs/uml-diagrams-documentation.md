@@ -137,13 +137,33 @@ graph TB
     Mobile --> Gateway
     Admin --> Gateway
     
-    Gateway --> Core Services
-    Gateway --> Delivery Services
-    Gateway --> Business Services
-    Gateway --> Support Services
+    Gateway --> UserSvc
+    Gateway --> AuthSvc
+    Gateway --> OrderSvc
+    Gateway --> PaymentSvc
+    Gateway --> DeliverySvc
+    Gateway --> TrackingSvc
+    Gateway --> DriverSvc
+    Gateway --> RouteSvc
+    Gateway --> MerchantSvc
+    Gateway --> CatalogSvc
+    Gateway --> CartSvc
+    Gateway --> PromoSvc
+    Gateway --> NotificationSvc
+    Gateway --> AnalyticsSvc
+    Gateway --> ChatSvc
+    Gateway --> SearchSvc
     
-    Service Layer --> Data Layer
-    Service Layer --> Infrastructure
+    UserSvc --> PG
+    OrderSvc --> PG
+    PaymentSvc --> PG
+    DeliverySvc --> Mongo
+    TrackingSvc --> Redis
+    SearchSvc --> Elastic
+    
+    NotificationSvc --> MQ
+    PaymentSvc --> BC
+    CatalogSvc --> Storage
 ```
 
 **Description**: This diagram illustrates the microservices architecture with four main service categories: Core, Delivery, Business, and Support services. Each service is independently deployable and communicates through the API Gateway. The data layer shows different database technologies used for different purposes.
