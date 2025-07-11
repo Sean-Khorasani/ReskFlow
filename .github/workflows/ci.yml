@@ -56,10 +56,11 @@ jobs:
           fi
       
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage/lcov.info
           flags: unit
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
     name: Integration Tests
