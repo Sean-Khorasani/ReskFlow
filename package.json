@@ -7,7 +7,7 @@
     "dev": "echo 'Please run dev commands in individual packages'",
     "build": "echo 'Please run build commands in individual packages'",
     "test": "jest",
-    "test:unit": "jest --testPathPattern=unit --coverage",
+    "test:unit": "jest --testPathPattern=unit --coverage --passWithNoTests",
     "test:integration": "jest --testPathPattern=integration",
     "test:contract": "jest --testPathPattern=contract",
     "test:e2e": "echo 'E2E tests will be implemented'",

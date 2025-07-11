@@ -28,7 +28,7 @@ jobs:
   test-services:
     name: Test ${{ matrix.service }} Service
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'unit' || github.event.inputs.test_type == 'integration'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'unit' || github.event.inputs.test_type == 'integration'
     strategy:
       matrix:
         service: [user, payment, order, delivery, notification, gateway]
@@ -104,7 +104,7 @@ jobs:
   performance-tests:
     name: Performance Tests
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'performance'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'performance'
     
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +138,7 @@ jobs:
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'security'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'security'
     
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +159,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'e2e'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'e2e'
     
     steps:
       - uses: actions/checkout@v4
@@ -191,7 +191,7 @@ jobs:
   chaos-tests:
     name: Chaos Engineering Tests
     runs-on: ubuntu-latest
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'chaos'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'chaos'
     
     steps:
       - uses: actions/checkout@v4
