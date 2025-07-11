@@ -2,7 +2,7 @@
 
 A cutting-edge enterprise delivery platform leveraging blockchain technology for transparency, security, and minimal transaction costs.
 
-> ⚠️ **Development Status**: This platform is in early development. Core backend services are implemented, but frontend applications are incomplete. See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) for details.
+> ✅ **Development Status**: The platform has comprehensive backend services, testing infrastructure, and frontend applications implemented. Configuration is required for deployment. See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) for details.
 
 ## Key Features
 
@@ -69,10 +69,26 @@ npm run dev
 ### Testing
 
 ```bash
-npm run test
-npm run test:e2e
-npm run test:coverage
+# Run all tests
+cd testing
+./run-all-tests.sh
+
+# Run specific test suites
+npm run test:unit          # Unit tests with coverage
+npm run test:integration   # Integration tests
+npm run test:contract      # Contract tests
+npm run test:e2e          # End-to-end tests
+
+# Performance testing
+cd testing/performance
+./run-performance-tests.sh
+
+# Security testing
+cd testing/security
+./run-security-tests.sh
 ```
+
+See [Testing Documentation](testing/README.md) for comprehensive testing guide.
 
 ## Project Structure
 
@@ -82,11 +98,13 @@ delivery/
 ├── backend/            # Microservices backend
 │   ├── gateway/        # API Gateway
 │   ├── services/       # Core services
+│   ├── src/            # Core service implementations
 │   └── shared/         # Shared libraries
 ├── frontend/           # Web applications
-│   ├── customer/       # Customer portal
-│   ├── admin/          # Admin dashboard
-│   └── partner/        # Partner portal
+│   ├── customer/       # Customer portal (Next.js)
+│   ├── admin/          # Admin dashboard (Next.js)
+│   ├── merchant/       # Merchant portal (Next.js)
+│   └── partner/        # Partner portal (Next.js)
 ├── mobile/             # Mobile applications
 │   ├── driver/         # Driver app (React Native)
 │   └── customer/       # Customer app (React Native)
@@ -94,8 +112,16 @@ delivery/
 │   ├── kubernetes/     # K8s manifests
 │   ├── terraform/      # Cloud infrastructure
 │   └── monitoring/     # Monitoring configs
+├── testing/            # Comprehensive test suites
+│   ├── unit/           # Unit tests
+│   ├── integration/    # Integration tests
+│   ├── contract/       # Contract tests
+│   ├── e2e/            # End-to-end tests
+│   ├── performance/    # Performance tests
+│   ├── security/       # Security tests
+│   └── chaos/          # Chaos engineering
 ├── docs/               # Documentation
-└── tests/              # Integration tests
+└── scripts/            # Utility scripts
 ```
 
 ## Smart Contract Architecture
