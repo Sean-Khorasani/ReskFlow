@@ -13,10 +13,11 @@ This guide helps you set up a complete ReskFlow environment on a single Ubuntu m
 3. [Database Setup](#database-setup)
 4. [ReskFlow Installation](#reskflow-installation)
 5. [Configuration](#configuration)
-6. [Starting the Platform](#starting-the-platform)
-7. [Accessing Different Roles](#accessing-different-roles)
-8. [Testing Workflows](#testing-workflows)
-9. [Troubleshooting](#troubleshooting)
+6. [Blockchain Configuration and Setup](#blockchain-configuration-and-setup)
+7. [Starting the Platform](#starting-the-platform)
+8. [Accessing Different Roles](#accessing-different-roles)
+9. [Testing Workflows](#testing-workflows)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -115,6 +116,18 @@ sudo systemctl enable elasticsearch
 sudo apt install -y nginx
 ```
 
+### Step 8: Install Blockchain Dependencies
+```bash
+# Install build essentials for node-gyp
+sudo apt install -y build-essential
+
+# Install Python (required for some blockchain packages)
+sudo apt install -y python3 python3-pip
+
+# Install global blockchain development tools
+npm install -g truffle ganache hardhat
+```
+
 ---
 
 ## Database Setup
@@ -189,6 +202,15 @@ ADMIN_PASSWORD=Admin123!
 
 # Development mode
 NODE_ENV=development
+
+# Blockchain Configuration
+BLOCKCHAIN_ENABLED=true
+BLOCKCHAIN_NETWORK=polygon-mumbai
+BLOCKCHAIN_RPC_URL=https://rpc-mumbai.maticvigil.com
+BLOCKCHAIN_CHAIN_ID=80001
+BLOCKCHAIN_GAS_LIMIT=3000000
+BLOCKCHAIN_PRIVATE_KEY=your-test-wallet-private-key
+BLOCKCHAIN_CONTRACT_ADDRESS=will-be-set-after-deployment
 EOF
 ```
 
@@ -251,6 +273,294 @@ EOF
 sudo ln -s /etc/nginx/sites-available/reskflow /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+---
+
+## Blockchain Configuration and Setup
+
+### Overview of ReskFlow Blockchain Features
+
+ReskFlow integrates blockchain technology to provide:
+1. **Immutable Order Records**: All orders are recorded on the blockchain for transparency
+2. **Smart Contract Payments**: Automated payment distribution between customers, merchants, drivers, and platform
+3. **Loyalty Token System**: RESKToken (RESK) rewards for customers and incentives for drivers
+4. **Dispute Resolution**: Blockchain-based escrow and dispute handling
+5. **Transparent Commission**: All fees and commissions are handled via smart contracts
+
+### Step 1: Set Up Test Wallet
+
+```bash
+# Create a test wallet for development
+cd /opt/reskflow/blockchain
+
+# Generate a new wallet
+cat > generate-wallet.js <<'EOF'
+const { ethers } = require('ethers');
+
+// Generate a new random wallet
+const wallet = ethers.Wallet.createRandom();
+
+console.log('=== New Wallet Generated ===');
+console.log('Address:', wallet.address);
+console.log('Private Key:', wallet.privateKey);
+console.log('Mnemonic:', wallet.mnemonic.phrase);
+console.log('\n⚠️  SAVE THESE CREDENTIALS SECURELY!');
+console.log('For testing, add the private key to your .env file');
+EOF
+
+# Run the wallet generator
+node generate-wallet.js
+```
+
+### Step 2: Get Test MATIC Tokens
+
+For testing on Polygon Mumbai testnet:
+
+1. **Save your wallet address** from the previous step
+2. **Get free test MATIC** from the Polygon Mumbai Faucet:
+   - Visit: https://faucet.polygon.technology/
+   - Select Mumbai network
+   - Paste your wallet address
+   - Request test tokens (you'll receive 0.2 MATIC)
+
+3. **Verify your balance**:
+```bash
+# Check balance script
+cat > check-balance.js <<'EOF'
+const { ethers } = require('ethers');
+require('dotenv').config();
+
+async function checkBalance() {
+    const provider = new ethers.providers.JsonRpcProvider(process.env.BLOCKCHAIN_RPC_URL);
+    const wallet = new ethers.Wallet(process.env.BLOCKCHAIN_PRIVATE_KEY, provider);
+    
+    const balance = await wallet.getBalance();
+    console.log('Wallet:', wallet.address);
+    console.log('Balance:', ethers.utils.formatEther(balance), 'MATIC');
+}
+
+checkBalance().catch(console.error);
+EOF
+
+node check-balance.js
+```
+
+### Step 3: Deploy Smart Contracts
+
+```bash
+# Navigate to blockchain directory
+cd /opt/reskflow/blockchain
+
+# Install dependencies
+npm install
+
+# Compile smart contracts
+npx hardhat compile
+
+# Deploy to Mumbai testnet
+npx hardhat run scripts/deploy.js --network mumbai
+
+# The output will show deployed contract addresses
+# Update your .env file with these addresses:
+# BLOCKCHAIN_CONTRACT_ADDRESS=<ReskFlowMain contract address>
+# RESK_TOKEN_ADDRESS=<RESKToken contract address>
+# ESCROW_CONTRACT_ADDRESS=<Escrow contract address>
+```
+
+### Step 4: Configure Blockchain Services
+
+```bash
+# Update the blockchain service configuration
+cat >> /opt/reskflow/.env <<'EOF'
+
+# Smart Contract Addresses (update with your deployed addresses)
+RESK_TOKEN_ADDRESS=0x... # Your deployed token address
+ESCROW_CONTRACT_ADDRESS=0x... # Your deployed escrow address
+DELIVERY_CONTRACT_ADDRESS=0x... # Your deployed delivery contract
+
+# Blockchain Service Configuration
+BLOCKCHAIN_SERVICE_ENABLED=true
+BLOCKCHAIN_CONFIRMATION_BLOCKS=2
+BLOCKCHAIN_GAS_PRICE_MULTIPLIER=1.2
+BLOCKCHAIN_MAX_RETRY_ATTEMPTS=3
+
+# Token Economics
+RESK_TOKEN_CUSTOMER_REWARD_PERCENT=2
+RESK_TOKEN_DRIVER_BONUS_PERCENT=1
+RESK_TOKEN_REFERRAL_BONUS=100
+EOF
+```
+
+### Step 5: Initialize Blockchain Service
+
+```bash
+# Start the blockchain service
+cd /opt/reskflow/backend/services/blockchain-service
+npm run dev
+
+# In another terminal, initialize the contracts
+cd /opt/reskflow/blockchain
+npx hardhat run scripts/initialize.js --network mumbai
+```
+
+### Using Blockchain Features
+
+#### 1. Customer Features
+- **Earn RESK Tokens**: Automatically earn 2% cashback in RESK tokens on every order
+- **View Token Balance**: Check balance in the customer app profile section
+- **Redeem Tokens**: Use RESK tokens for discounts on future orders
+- **Transaction History**: View all blockchain transactions in the app
+
+#### 2. Merchant Features
+- **Transparent Payments**: All payments are processed through smart contracts
+- **Instant Settlement**: Receive payments immediately after order completion
+- **Commission Transparency**: View exact commission calculations on-chain
+- **Dispute Protection**: Funds held in escrow until delivery confirmation
+
+#### 3. Driver Features
+- **Performance Bonuses**: Earn extra RESK tokens for on-time deliveries
+- **Gas Fee Reimbursement**: Platform covers blockchain transaction fees
+- **Instant Earnings**: Receive payment immediately upon delivery completion
+- **Reputation Score**: On-chain reputation system affects earning potential
+
+#### 4. Admin Features
+- **Monitor Contracts**: View all smart contract interactions in admin dashboard
+- **Adjust Parameters**: Modify reward percentages and commission rates
+- **Treasury Management**: Monitor platform treasury and token economics
+- **Analytics**: Blockchain-based analytics for transparent reporting
+
+### Testing Blockchain Workflows
+
+#### Test Order with Blockchain:
+```bash
+# Create a test order with blockchain
+curl -X POST http://localhost:4000/api/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <customer_token>" \
+  -d '{
+    "merchantId": "1",
+    "items": [{
+      "productId": "1",
+      "quantity": 2,
+      "price": 15.99
+    }],
+    "deliveryAddress": "123 Test St",
+    "paymentMethod": "blockchain",
+    "useBlockchain": true
+  }'
+
+# Response will include:
+# - orderId
+# - blockchainTxHash
+# - escrowAddress
+# - estimatedRewards
+```
+
+#### Monitor Blockchain Transactions:
+```bash
+# View recent blockchain transactions
+curl http://localhost:4000/api/blockchain/transactions
+
+# Check specific transaction
+curl http://localhost:4000/api/blockchain/tx/<txHash>
+
+# View contract events
+curl http://localhost:4000/api/blockchain/events
+```
+
+### Blockchain Troubleshooting
+
+#### Common Issues:
+
+1. **Insufficient Gas**:
+```bash
+# Increase gas limit in .env
+BLOCKCHAIN_GAS_LIMIT=5000000
+```
+
+2. **Transaction Fails**:
+```bash
+# Check wallet balance
+node check-balance.js
+
+# View error logs
+tail -f /opt/reskflow/backend/logs/blockchain-service.log
+```
+
+3. **Contract Not Responding**:
+```bash
+# Verify contract deployment
+npx hardhat verify --network mumbai <CONTRACT_ADDRESS>
+
+# Check contract state
+npx hardhat console --network mumbai
+> const contract = await ethers.getContractAt("ReskFlowMain", "<ADDRESS>")
+> await contract.paused()
+```
+
+### Local Blockchain Testing (Ganache)
+
+For faster development without using testnet:
+
+```bash
+# Start local blockchain
+ganache --deterministic --accounts 10 --host 0.0.0.0
+
+# Update .env for local testing
+BLOCKCHAIN_NETWORK=localhost
+BLOCKCHAIN_RPC_URL=http://localhost:8545
+BLOCKCHAIN_CHAIN_ID=1337
+
+# Deploy contracts locally
+npx hardhat run scripts/deploy.js --network localhost
+
+# Run tests
+npm test
+```
+
+### Blockchain Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   ReskFlow Blockchain Layer              │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────┐│
+│  │  ReskFlowMain  │  │   RESKToken    │  │   Escrow   ││
+│  │    Contract    │  │    (ERC20)     │  │  Contract  ││
+│  └────────────────┘  └────────────────┘  └────────────┘│
+│           │                   │                   │      │
+│           └───────────────────┴───────────────────┘      │
+│                              │                           │
+│                    ┌─────────────────┐                   │
+│                    │ Blockchain Service│                  │
+│                    │   (Node.js)      │                  │
+│                    └─────────────────┘                   │
+│                              │                           │
+└──────────────────────────────┼───────────────────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │   Main Platform     │
+                    │     Services        │
+                    └────────────────────┘
+```
+
+### Smart Contract Functions
+
+#### Key Contract Methods:
+- `createOrder()`: Records new order on blockchain
+- `confirmDelivery()`: Releases payment from escrow
+- `disputeOrder()`: Initiates dispute resolution
+- `distributePayments()`: Automatically splits payments
+- `rewardTokens()`: Distributes RESK token rewards
+
+### Security Considerations
+
+1. **Never share private keys**
+2. **Use hardware wallets in production**
+3. **Implement multi-sig for admin functions**
+4. **Regular smart contract audits**
+5. **Monitor for unusual activity**
 
 ---
 
