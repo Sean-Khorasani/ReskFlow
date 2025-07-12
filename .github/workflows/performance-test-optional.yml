@@ -102,6 +102,13 @@ jobs:
               echo "Building $service service..."
               cd "backend/services/$service"
               npm install
+              
+              # Generate Prisma client if prisma directory exists
+              if [ -d "prisma" ]; then
+                echo "Generating Prisma client for $service..."
+                npx prisma generate
+              fi
+              
               npm run build || echo "Build script not configured for $service"
               cd -
             fi
@@ -109,19 +116,21 @@ jobs:
       
       - name: Start services
         run: |
-          # Start each service in background
-          for service in user notification payment order delivery gateway; do
+          # Start each service in background with proper ports
+          services=("user:3001" "notification:3006" "payment:3003" "order:3005" "delivery:3007" "gateway:3000")
+          
+          for service_port in "${services[@]}"; do
+            IFS=':' read -r service port <<< "$service_port"
             if [ -d "backend/services/$service" ]; then
-              echo "Starting $service service..."
+              echo "Starting $service service on port $port..."
               cd "backend/services/$service"
-              PORT=$((3000 + $(echo $service | cksum | cut -f1 -d' ') % 1000))
-              NODE_ENV=test PORT=$PORT npm start &
+              NODE_ENV=test PORT=$port npm start > "${service}.log" 2>&1 &
               cd -
             fi
           done
           
           # Give services time to start
-          sleep 10
+          sleep 20
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reskflow
           REDIS_URL: redis://localhost:6379
@@ -140,6 +149,18 @@ jobs:
               break
             fi
             echo "Waiting for services... ($i/30)"
+            
+            # On last attempt, show service logs
+            if [ $i -eq 30 ]; then
+              echo "Services failed to start. Checking logs..."
+              for service in user notification payment order delivery gateway; do
+                if [ -f "backend/services/$service/${service}.log" ]; then
+                  echo "=== $service service logs ==="
+                  tail -20 "backend/services/$service/${service}.log"
+                fi
+              done
+            fi
+            
             sleep 2
           done
       
