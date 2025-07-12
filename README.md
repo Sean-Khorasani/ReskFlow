@@ -2,8 +2,6 @@
 
 A cutting-edge enterprise delivery platform leveraging blockchain technology for transparency, security, and minimal transaction costs.
 
-> ✅ **Development Status**: The platform has comprehensive backend services, testing infrastructure, and frontend applications implemented. Configuration is required for deployment. See [Implementation Status](docs/IMPLEMENTATION_STATUS.md) for details.
-
 ## Key Features
 
 - **Blockchain Integration**: Polygon-based smart contracts with <$0.01 gas fees
@@ -147,9 +145,9 @@ API documentation is available at `http://localhost:3000/docs` when running loca
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](docs/contributing.md) for details on our code of conduct and the process for submitting pull requests.
+Please read [Contributing](docs/contributing.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [License](LICENSE) file for details.
 
