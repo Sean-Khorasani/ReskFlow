@@ -107,9 +107,10 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   performance-tests:
-    name: Performance Tests
+    name: Performance Tests (Smoke Test)
     runs-on: ubuntu-latest
     continue-on-error: true
+    # Only run basic smoke test on regular CI - full tests via label
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'performance'
     
     steps:
@@ -139,22 +140,16 @@ jobs:
             echo "::warning::Wait script not found"
           fi
       
-      - name: Run performance tests
+      - name: Run performance smoke test
         run: |
-          if [ -d "testing/performance" ] && [ -f "testing/performance/run-performance-tests.sh" ]; then
-            cd testing/performance
-            ./run-performance-tests.sh
-          else
-            echo "::warning::Performance tests not yet configured"
-            mkdir -p testing/performance/results
-            echo "Performance tests pending" > testing/performance/results/summary.txt
-          fi
+          cd testing/performance
+          ./run-performance-tests-ci.sh
       
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: performance-results
-          path: testing/performance/results/
+          path: testing/performance/results/ci/
 
   security-tests:
     name: Security Tests
