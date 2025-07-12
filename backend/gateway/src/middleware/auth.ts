@@ -219,7 +219,7 @@ export const apiKeyAuth = (req: Request, res: Response, next: NextFunction): voi
 export const refreshTokenMiddleware = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): Promise<void> => {
   try {
     const refreshToken = req.body.refreshToken || req.headers['x-refresh-token'];

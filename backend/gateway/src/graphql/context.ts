@@ -3,6 +3,17 @@ import { PubSub } from 'graphql-subscriptions';
 import DataLoader from 'dataloader';
 import { prisma, redis, blockchain } from '@reskflow/shared';
 import { getUserLoader, getAddressLoader, getDeliveryLoader } from './dataloaders';
+import { User, Address, Delivery } from '@prisma/client';
+
+type UserWithProfile = User & { profile?: any };
+type DeliveryWithRelations = Delivery & {
+  sender?: User;
+  recipient?: User;
+  driver?: User;
+  pickupAddress?: Address;
+  deliveryAddress?: Address;
+  trackingEvents?: any[];
+};
 
 export interface Context {
   req: Request;
@@ -17,9 +28,9 @@ export interface Context {
     walletAddress?: string;
   };
   loaders: {
-    user: DataLoader<string, any>;
-    address: DataLoader<string, any>;
-    delivery: DataLoader<string, any>;
+    user: DataLoader<string, UserWithProfile | null>;
+    address: DataLoader<string, Address | null>;
+    delivery: DataLoader<string, DeliveryWithRelations | null>;
   };
 }
 

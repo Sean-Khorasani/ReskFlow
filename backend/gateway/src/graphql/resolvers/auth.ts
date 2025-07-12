@@ -3,9 +3,16 @@ import { generateToken, generateRefreshToken } from '@reskflow/shared';
 import { Context } from '../context';
 import { GraphQLError } from 'graphql';
 
+interface SignupInput {
+  email: string;
+  phone: string;
+  password: string;
+  role?: string;
+}
+
 export const authResolvers = {
   Query: {
-    me: async (_: any, __: any, { user, prisma }: Context) => {
+    me: async (_: unknown, __: unknown, { user, prisma }: Context) => {
       if (!user) throw new GraphQLError('Not authenticated');
       
       return prisma.user.findUnique({
@@ -16,7 +23,7 @@ export const authResolvers = {
   },
 
   Mutation: {
-    signup: async (_: any, { input }: any, { prisma }: Context) => {
+    signup: async (_: unknown, { input }: { input: SignupInput }, { prisma }: Context) => {
       const existingUser = await prisma.user.findFirst({
         where: {
           OR: [
@@ -64,7 +71,7 @@ export const authResolvers = {
       return { token, refreshToken, user };
     },
 
-    login: async (_: any, { email, password }: any, { prisma }: Context) => {
+    login: async (_: unknown, { email, password }: { email: string; password: string }, { prisma }: Context) => {
       const user = await prisma.user.findUnique({
         where: { email },
         include: { profile: true },
@@ -109,7 +116,7 @@ export const authResolvers = {
       return { token, refreshToken, user };
     },
 
-    refreshToken: async (_: any, { refreshToken }: any, { prisma }: Context) => {
+    refreshToken: async (_: unknown, { refreshToken }: { refreshToken: string }, { prisma }: Context) => {
       const session = await prisma.session.findUnique({
         where: { refreshToken },
         include: { user: { include: { profile: true } } },
@@ -144,7 +151,7 @@ export const authResolvers = {
       };
     },
 
-    logout: async (_: any, __: any, { user, req, prisma, redis }: Context) => {
+    logout: async (_: unknown, __: unknown, { user, req, prisma, redis }: Context) => {
       if (!user) throw new GraphQLError('Not authenticated');
 
       const token = req.headers.authorization?.substring(7);

@@ -102,10 +102,13 @@ export const healthCheckProxy = async (req: Request, res: Response): Promise<voi
   const healthChecks = await Promise.allSettled(
     Object.entries(config.services).map(async ([serviceName, serviceConfig]) => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const response = await fetch(`${serviceConfig.url}/health`, {
           method: 'GET',
-          timeout: 5000
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         return {
           service: serviceName,
@@ -242,7 +245,7 @@ export const circuitBreakerMiddleware = (
 
   // Intercept response to track success/failure
   const originalSend = res.send;
-  res.send = function(data: any) {
+  res.send = function(data: any): any {
     if (res.statusCode >= 500) {
       circuitBreaker.recordFailure(serviceName);
     } else {
@@ -274,7 +277,7 @@ export const retryMiddleware = (options: {
     const attemptRequest = async (): Promise<void> => {
       try {
         // Clone the request for retry
-        const clonedReq = Object.create(req);
+        // const clonedReq = Object.create(req);
         
         // Create a mock response to capture the result
         const mockRes: any = {

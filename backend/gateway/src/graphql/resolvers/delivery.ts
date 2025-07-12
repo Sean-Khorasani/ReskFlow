@@ -1,6 +1,70 @@
 import { Context } from '../context';
 import { GraphQLError } from 'graphql';
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid';
+
+interface DeliveryArgs {
+  id: string;
+}
+
+interface DeliveryByTrackingArgs {
+  trackingNumber: string;
+}
+
+interface DeliveriesArgs {
+  status?: string;
+  driverId?: string;
+  senderId?: string;
+  first?: number;
+  after?: string;
+}
+
+interface DeliveryStatsArgs {
+  startDate?: string;
+  endDate?: string;
+}
+
+interface OptimizeRouteInput {
+  deliveryIds: string[];
+  startLocation: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+interface OptimizeRouteArgs {
+  input: OptimizeRouteInput;
+}
+
+interface CreateDeliveryInput {
+  recipientId: string;
+  pickupAddressId: string;
+  deliveryAddressId: string;
+  packageDetails: {
+    weight?: number;
+    dimensions?: { length: number; width: number; height: number };
+    value?: number;
+  };
+  scheduledPickup?: Date;
+  scheduledDelivery?: Date;
+  priority?: number;
+  insuranceAmount?: number;
+}
+
+interface CreateDeliveryArgs {
+  input: CreateDeliveryInput;
+}
+
+interface UpdateDeliveryStatusInput {
+  deliveryId: string;
+  status: string;
+  location?: any;
+  description?: string;
+  proof?: string;
+}
+
+interface UpdateDeliveryStatusArgs {
+  input: UpdateDeliveryStatusInput;
+}
 
 export const deliveryResolvers = {
   Query: {
@@ -55,7 +119,7 @@ export const deliveryResolvers = {
     ) => {
       if (!user) throw new GraphQLError('Not authenticated');
 
-      const where: any = {};
+      const where: Record<string, any> = {};
 
       if (status) where.status = status;
       if (driverId) where.driverId = driverId;
@@ -108,7 +172,7 @@ export const deliveryResolvers = {
         throw new GraphQLError('Admin access required');
       }
 
-      const where: any = {};
+      const where: Record<string, any> = {};
       if (startDate || endDate) {
         where.createdAt = {};
         if (startDate) where.createdAt.gte = new Date(startDate);

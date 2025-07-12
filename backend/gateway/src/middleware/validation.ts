@@ -149,7 +149,7 @@ export const fileValidation = (options: {
       const files = Array.isArray(req.files) ? req.files : Object.values(req.files).flat();
       
       for (const file of files) {
-        if (!validateFile(file as any, maxSize, allowedTypes)) {
+        if (!validateFile(file as Express.Multer.File, maxSize, allowedTypes)) {
           res.status(400).json({ error: 'Invalid file' });
           return;
         }
@@ -163,7 +163,11 @@ export const fileValidation = (options: {
 /**
  * JSON schema validation middleware
  */
-export const schemaValidation = (schema: any) => {
+interface ValidationSchema {
+  validate(data: any, options?: any): { error?: { details: Array<{ path: string[]; message: string }> } };
+}
+
+export const schemaValidation = (schema: ValidationSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error } = schema.validate(req.body, {
       abortEarly: false,
@@ -171,7 +175,7 @@ export const schemaValidation = (schema: any) => {
     });
 
     if (error) {
-      const errors = error.details.map((detail: any) => ({
+      const errors = error.details.map((detail) => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
@@ -337,11 +341,11 @@ export const customValidations = {
 /**
  * Helper functions
  */
-function sanitizeObject(obj: any): any {
-  const sanitized: any = {};
+function sanitizeObject(obj: Record<string, any>): Record<string, any> {
+  const sanitized: Record<string, any> = {};
   
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const value = obj[key];
       
       if (typeof value === 'string') {
@@ -366,7 +370,7 @@ function sanitizeObject(obj: any): any {
   return sanitized;
 }
 
-function validateFile(file: any, maxSize: number, allowedTypes: string[]): boolean {
+function validateFile(file: Express.Multer.File, maxSize: number, allowedTypes: string[]): boolean {
   // Check file size
   if (file.size > maxSize) {
     return false;

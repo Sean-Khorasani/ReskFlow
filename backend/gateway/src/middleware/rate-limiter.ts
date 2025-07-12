@@ -136,7 +136,7 @@ export const tierBasedRateLimiter = async (
   next: NextFunction
 ): Promise<void> => {
   // Default limits
-  let windowMs = 15 * 60 * 1000; // 15 minutes
+  const windowMs = 15 * 60 * 1000; // 15 minutes
   let maxRequests = 100;
 
   // Adjust limits based on user tier

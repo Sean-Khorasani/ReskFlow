@@ -3,10 +3,10 @@
  * Aggregates all route handlers for the gateway
  */
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { rateLimiter } from '../middleware/rate-limiter';
-import { validationMiddleware } from '../middleware/validation';
+// import { rateLimiter } from '../middleware/rate-limiter';
+// import { validationMiddleware } from '../middleware/validation';
 import { proxyMiddleware } from '../middleware/proxy';
 import { config } from '../config';
 
@@ -51,7 +51,7 @@ import { searchRoutes } from './core/search.routes';
 
 export function setupRoutes(app: Router) {
   // Health check endpoint
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -120,7 +120,7 @@ export function setupRoutes(app: Router) {
   });
 
   // Error handler
-  app.use((err: any, req: any, res: any, next: any) => {
+  app.use((err: Error & { status?: number; statusCode?: number }, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || 'Internal Server Error';
 
@@ -138,10 +138,10 @@ export function setupRoutes(app: Router) {
       error: message,
       status,
       timestamp: new Date().toISOString(),
-      requestId: req.id
+      requestId: (req as any).id
     });
   });
 }
 
 // Middleware imports
-import { logger } from '../../utils/logger';
+import { logger } from '../utils/logger';

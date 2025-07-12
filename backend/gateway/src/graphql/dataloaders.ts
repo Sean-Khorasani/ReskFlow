@@ -1,7 +1,18 @@
 import DataLoader from 'dataloader';
 import { prisma } from '@reskflow/shared';
+import { User, Address, Delivery } from '@prisma/client';
 
-export const getUserLoader = () => new DataLoader<string, any>(
+type UserWithProfile = User & { profile?: any };
+type DeliveryWithRelations = Delivery & {
+  sender?: User;
+  recipient?: User;
+  driver?: User;
+  pickupAddress?: Address;
+  deliveryAddress?: Address;
+  trackingEvents?: any[];
+};
+
+export const getUserLoader = () => new DataLoader<string, UserWithProfile | null>(
   async (userIds) => {
     const users = await prisma.user.findMany({
       where: { id: { in: [...userIds] } },
@@ -13,7 +24,7 @@ export const getUserLoader = () => new DataLoader<string, any>(
   }
 );
 
-export const getAddressLoader = () => new DataLoader<string, any>(
+export const getAddressLoader = () => new DataLoader<string, Address | null>(
   async (addressIds) => {
     const addresses = await prisma.address.findMany({
       where: { id: { in: [...addressIds] } },
@@ -24,10 +35,10 @@ export const getAddressLoader = () => new DataLoader<string, any>(
   }
 );
 
-export const getDeliveryLoader = () => new DataLoader<string, any>(
+export const getDeliveryLoader = () => new DataLoader<string, DeliveryWithRelations | null>(
   async (deliveryIds) => {
     const deliveries = await prisma.delivery.findMany({
-      where: { id: { in: [...delivIds] } },
+      where: { id: { in: [...deliveryIds] } },
       include: {
         sender: true,
         recipient: true,
