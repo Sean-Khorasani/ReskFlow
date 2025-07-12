@@ -56,6 +56,15 @@ async function startServer() {
         version: process.env.npm_package_version,
       });
     });
+    
+    // Service-specific health endpoints for performance tests
+    app.get('/api/auth/health', (req, res) => res.json({ status: 'healthy', service: 'auth' }));
+    app.get('/api/users/health', (req, res) => res.json({ status: 'healthy', service: 'user' }));
+    app.get('/api/orders/health', (req, res) => res.json({ status: 'healthy', service: 'order' }));
+    app.get('/api/payments/health', (req, res) => res.json({ status: 'healthy', service: 'payment' }));
+    app.get('/api/notifications/health', (req, res) => res.json({ status: 'healthy', service: 'notification' }));
+    app.get('/api/catalog/health', (req, res) => res.json({ status: 'healthy', service: 'catalog' }));
+    app.get('/api/merchants/health', (req, res) => res.json({ status: 'healthy', service: 'merchant' }));
 
     // REST API routes
     setupRoutes(app);

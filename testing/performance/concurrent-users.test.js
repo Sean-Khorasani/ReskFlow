@@ -6,6 +6,7 @@ import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
 import { baseURL, getHeaders, generateTestUser, generateTestOrder } from './k6-config.js';
+import { shouldSkipTest, waitForServices } from './health-check.js';
 import exec from 'k6/execution';
 
 // Custom metrics
@@ -83,8 +84,26 @@ const userPersonas = {
   },
 };
 
+// Required services for this test
+const REQUIRED_SERVICES = ['gateway', 'auth', 'user', 'catalog', 'order'];
+
+// Setup function to check services
+export function setup() {
+  // Wait for services to be ready
+  if (!waitForServices(baseURL, REQUIRED_SERVICES)) {
+    return { skip: true, reason: 'Required services not available' };
+  }
+  
+  return { skip: false };
+}
+
 // Simulate user session
-export default function() {
+export default function(data) {
+  // Skip test execution if services are not healthy
+  if (shouldSkipTest(data)) {
+    console.log('Skipping test execution due to unhealthy services');
+    return;
+  }
   const sessionStartTime = Date.now();
   const vuId = exec.vu.idInTest;
   activeUsers.add(1);
