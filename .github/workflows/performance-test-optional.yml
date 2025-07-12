@@ -1,0 +1,207 @@
+name: Performance Tests (Optional)
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to test'
+        required: true
+        type: number
+
+jobs:
+  performance-tests-full:
+    name: Full Performance Tests with Services
+    runs-on: ubuntu-latest
+    # Only run if labeled with "run-performance-tests" or manually triggered
+    if: |
+      (github.event_name == 'pull_request' && contains(github.event.label.name, 'run-performance-tests')) ||
+      github.event_name == 'workflow_dispatch'
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reskflow
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: mongo
+          MONGO_INITDB_ROOT_PASSWORD: mongo
+          MONGO_INITDB_DATABASE: reskflow
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
+      
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: rabbitmq
+          RABBITMQ_DEFAULT_PASS: rabbitmq
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5672:5672
+          - 15672:15672
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Setup database
+        run: |
+          cd backend/shared
+          npm install
+          npx prisma generate
+          npx prisma migrate deploy || npx prisma db push
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reskflow
+      
+      - name: Build services
+        run: |
+          # Build each service
+          for service in user notification payment order delivery gateway; do
+            if [ -d "backend/services/$service" ]; then
+              echo "Building $service service..."
+              cd "backend/services/$service"
+              npm install
+              npm run build || echo "Build script not configured for $service"
+              cd -
+            fi
+          done
+      
+      - name: Start services
+        run: |
+          # Start each service in background
+          for service in user notification payment order delivery gateway; do
+            if [ -d "backend/services/$service" ]; then
+              echo "Starting $service service..."
+              cd "backend/services/$service"
+              PORT=$((3000 + $(echo $service | cksum | cut -f1 -d' ') % 1000))
+              NODE_ENV=test PORT=$PORT npm start &
+              cd -
+            fi
+          done
+          
+          # Give services time to start
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/reskflow
+          REDIS_URL: redis://localhost:6379
+          MONGODB_URI: mongodb://mongo:mongo@localhost:27017/reskflow?authSource=admin
+          RABBITMQ_URL: amqp://rabbitmq:rabbitmq@localhost:5672
+          JWT_SECRET: test-secret-key
+          REFRESH_TOKEN_SECRET: test-refresh-secret
+      
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to be ready..."
+          for i in {1..30}; do
+            # Check if API gateway is responding
+            if curl -f http://localhost:3000/health 2>/dev/null; then
+              echo "API Gateway is ready!"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+      
+      - name: Setup K6
+        run: |
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+      
+      - name: Run full performance tests
+        run: |
+          cd testing/performance
+          ./run-performance-tests.sh
+        env:
+          BASE_URL: http://localhost:3000
+      
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results-full
+          path: testing/performance/results/
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read summary file
+            const summaryPath = 'testing/performance/results/summary.txt';
+            let summary = 'Performance test results not found';
+            
+            if (fs.existsSync(summaryPath)) {
+              summary = fs.readFileSync(summaryPath, 'utf8');
+            }
+            
+            // Create comment
+            const comment = `## 🚀 Performance Test Results
+            
+            ${summary}
+            
+            Full results have been uploaded as artifacts.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+      
+      - name: Remove label after completion
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.removeLabel({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'run-performance-tests'
+            });
