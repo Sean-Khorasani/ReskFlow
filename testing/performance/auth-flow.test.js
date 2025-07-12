@@ -6,10 +6,14 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
 import { baseURL, getHeaders, checkResponse, generateTestUser, scenarios, thresholds } from './k6-config.js';
+import { setupWithHealthCheck, shouldSkipTest, waitForServices } from './health-check.js';
 
 // Custom metrics
 const loginFailureRate = new Rate('login_failures');
 const tokenRefreshRate = new Rate('token_refresh_success');
+
+// Required services for this test
+const REQUIRED_SERVICES = ['gateway', 'auth', 'user'];
 
 // Test configuration
 export const options = {
@@ -28,6 +32,11 @@ let testUsers = [];
 
 // Setup: Create test users
 export function setup() {
+  // Wait for services to be ready
+  if (!waitForServices(baseURL, REQUIRED_SERVICES)) {
+    return { skip: true, reason: 'Required services not available' };
+  }
+  
   console.log('Creating test users...');
   
   const setupUsers = [];
@@ -46,12 +55,23 @@ export function setup() {
     }
   }
   
-  return { users: setupUsers };
+  return { users: setupUsers, skip: false };
 }
 
 // Main test scenario
 export default function(data) {
+  // Skip test execution if services are not healthy
+  if (shouldSkipTest(data)) {
+    console.log('Skipping test execution due to unhealthy services');
+    return;
+  }
+  
   const users = data.users;
+  if (!users || users.length === 0) {
+    console.error('No test users available');
+    return;
+  }
+  
   const user = users[Math.floor(Math.random() * users.length)];
   
   // Test 1: User Registration (for new users during test)

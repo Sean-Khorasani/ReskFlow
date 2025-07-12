@@ -7,6 +7,7 @@ import { check, sleep, group } from 'k6';
 import { SharedArray } from 'k6/data';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { baseURL, getHeaders, scenarios, thresholds } from './k6-config.js';
+import { shouldSkipTest, waitForServices } from './health-check.js';
 
 // Custom metrics per endpoint
 const endpointMetrics = {
@@ -75,6 +76,9 @@ export const options = {
   },
 };
 
+// Required services for this test
+const REQUIRED_SERVICES = ['gateway'];
+
 // Test data
 const testData = new SharedArray('test-data', function() {
   return {
@@ -84,6 +88,16 @@ const testData = new SharedArray('test-data', function() {
     tokens: ['token-1', 'token-2', 'token-3'],
   };
 });
+
+// Setup function to check services
+export function setup() {
+  // Wait for services to be ready
+  if (!waitForServices(baseURL, REQUIRED_SERVICES)) {
+    return { skip: true, reason: 'Required services not available' };
+  }
+  
+  return { skip: false };
+}
 
 // User API Tests
 export function testUserAPIs() {

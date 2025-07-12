@@ -6,11 +6,15 @@ import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 import { baseURL, getHeaders, checkResponse, generateTestUser, generateTestOrder, scenarios, thresholds } from './k6-config.js';
+import { shouldSkipTest, waitForServices } from './health-check.js';
 
 // Custom metrics
 const orderCreationRate = new Rate('order_creation_success');
 const orderCompletionTime = new Trend('order_completion_time');
 const paymentProcessingTime = new Trend('payment_processing_time');
+
+// Required services for this test
+const REQUIRED_SERVICES = ['gateway', 'auth', 'user', 'order', 'payment', 'catalog', 'merchant'];
 
 // Test configuration
 export const options = {
@@ -30,6 +34,11 @@ let testData = {};
 
 // Setup: Create test data
 export function setup() {
+  // Wait for services to be ready
+  if (!waitForServices(baseURL, REQUIRED_SERVICES)) {
+    return { skip: true, reason: 'Required services not available' };
+  }
+  
   console.log('Setting up test data...');
   
   // Create test customer
@@ -82,11 +91,18 @@ export function setup() {
     customerTokens,
     merchants,
     merchantMenus,
+    skip: false,
   };
 }
 
 // Main test scenario
 export default function(data) {
+  // Skip test execution if services are not healthy
+  if (shouldSkipTest(data)) {
+    console.log('Skipping test execution due to unhealthy services');
+    return;
+  }
+  
   const { customer, customerTokens, merchants, merchantMenus } = data;
   
   // Select random merchant
