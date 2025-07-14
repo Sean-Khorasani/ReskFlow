@@ -1,0 +1,29 @@
+{
+  "name": "@reskflow/discovery-service",
+  "version": "1.0.0",
+  "description": "Restaurant and store discovery service with search and filters",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "start": "node dist/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@reskflow/shared": "workspace:*",
+    "express": "^4.18.2",
+    "@elastic/elasticsearch": "^8.11.0",
+    "geolib": "^3.3.4",
+    "node-geocoder": "^4.2.0",
+    "@turf/turf": "^6.5.0",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/express": "^4.17.21",
+    "@types/lodash": "^4.14.202",
+    "@types/node-geocoder": "^4.2.0",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2"
+  }
+}

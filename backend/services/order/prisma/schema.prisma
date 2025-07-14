@@ -1,0 +1,176 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+  DINE_IN
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique
+  userId          String
+  merchantId      String
+  cartId          String?
+  
+  items           OrderItem[]
+  
+  subtotal        Float
+  tax             Float
+  reskflowFee     Float
+  serviceFee      Float
+  discount        Float         @default(0)
+  total           Float
+  
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentId       String?
+  
+  reskflowType    DeliveryType
+  reskflowAddress Json?
+  reskflowTime    DateTime?
+  reskflowId      String?
+  
+  customerNotes   String?
+  merchantNotes   String?
+  
+  timeline        OrderTimeline[]
+  invoice         Invoice?
+  rating          OrderRating?
+  
+  metadata        Json?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  
+  @@index([userId])
+  @@index([merchantId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId       String
+  productName     String
+  productImage    String?
+  
+  quantity        Int
+  unitPrice       Float
+  totalPrice      Float
+  
+  options         Json?    // Selected options/variations
+  specialRequests String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderTimeline {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  status      OrderStatus
+  message     String
+  actor       String?     // userId or system
+  metadata    Json?
+  
+  createdAt   DateTime    @default(now())
+  
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  invoiceNumber String   @unique
+  invoiceUrl    String?
+  
+  customerInfo  Json
+  merchantInfo  Json
+  items         Json
+  
+  subtotal      Float
+  tax           Float
+  total         Float
+  
+  issuedAt      DateTime @default(now())
+  dueDate       DateTime?
+  paidAt        DateTime?
+  
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([invoiceNumber])
+  @@index([orderId])
+}
+
+model OrderRating {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  userId        String
+  
+  foodRating    Int      // 1-5
+  reskflowRating Int?    // 1-5, null for pickup/dine-in
+  overallRating Int      // 1-5
+  
+  comment       String?
+  
+  merchantReply String?
+  merchantReplyAt DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([orderId])
+  @@index([userId])
+  @@index([createdAt])
+}

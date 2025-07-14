@@ -1,0 +1,298 @@
+# Chaos Engineering Experiments for ReskFlow
+# Using Litmus Chaos framework
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reskflow-chaos-experiments
+  namespace: reskflow
+data:
+  experiments: |
+    experiments:
+      # Pod-level chaos experiments
+      - name: pod-delete
+        description: "Random pod deletion to test resilience"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app.kubernetes.io/name"
+            appkind: deployment
+          chaosServiceAccount: litmus-admin
+          experiments:
+            - name: pod-delete
+              spec:
+                components:
+                  env:
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '30'
+                    - name: CHAOS_INTERVAL
+                      value: '10'
+                    - name: FORCE
+                      value: 'false'
+                    - name: PODS_AFFECTED_PERC
+                      value: '50'
+                probe:
+                  - name: check-api-availability
+                    type: httpProbe
+                    httpProbe/inputs:
+                      url: http://gateway-service:3000/health
+                      insecureSkipVerify: false
+                      method:
+                        get:
+                          criteria: ==
+                          responseCode: "200"
+                    runProperties:
+                      probeTimeout: 5
+                      interval: 2
+                      retry: 3
+                      probePollingInterval: 2
+
+      # Network chaos experiments
+      - name: network-latency
+        description: "Inject network latency between services"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app.kubernetes.io/name=order-service"
+            appkind: deployment
+          experiments:
+            - name: pod-network-latency
+              spec:
+                components:
+                  env:
+                    - name: NETWORK_INTERFACE
+                      value: 'eth0'
+                    - name: TARGET_CONTAINER
+                      value: 'order-service'
+                    - name: NETWORK_LATENCY
+                      value: '2000' # 2 seconds
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+                    - name: DESTINATION_IPS
+                      value: 'payment-service,user-service'
+                    - name: DESTINATION_HOSTS
+                      value: 'payment-service.reskflow.svc.cluster.local'
+
+      - name: network-partition
+        description: "Simulate network partition between services"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app.kubernetes.io/name=payment-service"
+            appkind: deployment
+          experiments:
+            - name: pod-network-partition
+              spec:
+                components:
+                  env:
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+                    - name: POLICY_TYPES
+                      value: 'ingress,egress'
+                    - name: PODS_AFFECTED_PERC
+                      value: '100'
+
+      # Resource chaos experiments
+      - name: memory-stress
+        description: "Memory stress on service pods"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app.kubernetes.io/name=reskflow-service"
+            appkind: deployment
+          experiments:
+            - name: pod-memory-hog
+              spec:
+                components:
+                  env:
+                    - name: MEMORY_CONSUMPTION
+                      value: '500' # MB
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+                    - name: PODS_AFFECTED_PERC
+                      value: '50'
+
+      - name: cpu-stress
+        description: "CPU stress on service pods"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app.kubernetes.io/name=tracking-service"
+            appkind: deployment
+          experiments:
+            - name: pod-cpu-hog
+              spec:
+                components:
+                  env:
+                    - name: CPU_CORES
+                      value: '1'
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+                    - name: PODS_AFFECTED_PERC
+                      value: '50'
+
+      # Database chaos experiments
+      - name: database-connection-drain
+        description: "Drain database connections"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app=postgresql"
+            appkind: statefulset
+          experiments:
+            - name: pod-network-loss
+              spec:
+                components:
+                  env:
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '30'
+                    - name: NETWORK_INTERFACE
+                      value: 'eth0'
+                    - name: PACKET_LOSS_PERCENTAGE
+                      value: '100'
+                    - name: DESTINATION_IPS
+                      value: '10.0.0.0/16' # Service subnet
+
+      # Kafka chaos experiments
+      - name: kafka-broker-failure
+        description: "Simulate Kafka broker failure"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app=kafka"
+            appkind: statefulset
+          experiments:
+            - name: kafka-broker-pod-failure
+              spec:
+                components:
+                  env:
+                    - name: KAFKA_INSTANCE_NAME
+                      value: 'kafka-0'
+                    - name: KAFKA_NAMESPACE
+                      value: 'reskflow'
+                    - name: KAFKA_LABEL
+                      value: 'app=kafka'
+                    - name: KAFKA_SERVICE
+                      value: 'kafka-svc'
+                    - name: KAFKA_PORT
+                      value: '9092'
+                    - name: KAFKA_REPLICATION_FACTOR
+                      value: '3'
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+
+      # Redis chaos experiments
+      - name: redis-cache-flush
+        description: "Flush Redis cache to test cache miss handling"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "app=redis"
+            appkind: deployment
+          experiments:
+            - name: redis-cache-expire
+              spec:
+                components:
+                  env:
+                    - name: REDIS_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: redis-secret
+                          key: password
+                    - name: REDIS_DB
+                      value: '0'
+                    - name: OPERATIONS
+                      value: 'FLUSHDB'
+
+      # Service mesh chaos experiments
+      - name: istio-fault-injection
+        description: "Inject faults using Istio"
+        spec:
+          appinfo:
+            appns: reskflow
+            applabel: "version=v1"
+            appkind: deployment
+          experiments:
+            - name: istio-http-delay
+              spec:
+                components:
+                  env:
+                    - name: TARGET_SERVICE
+                      value: 'order-service'
+                    - name: DELAY
+                      value: '5s'
+                    - name: PERCENTAGE
+                      value: '50'
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+
+            - name: istio-http-abort
+              spec:
+                components:
+                  env:
+                    - name: TARGET_SERVICE
+                      value: 'payment-service'
+                    - name: HTTP_STATUS
+                      value: '503'
+                    - name: PERCENTAGE
+                      value: '20'
+                    - name: TOTAL_CHAOS_DURATION
+                      value: '60'
+
+      # Cascading failure experiment
+      - name: cascading-failure
+        description: "Simulate cascading failure scenario"
+        spec:
+          appinfo:
+            appns: reskflow
+          experiments:
+            - name: sequential-pod-failure
+              spec:
+                sequence:
+                  - target: user-service
+                    delay: 0
+                  - target: order-service
+                    delay: 10
+                  - target: payment-service
+                    delay: 20
+                  - target: reskflow-service
+                    delay: 30
+
+    # Steady state hypotheses
+    steadyStateHypothesis:
+      - name: "API Gateway responds within SLA"
+        probe:
+          type: httpProbe
+          httpProbe/inputs:
+            url: http://gateway-service:3000/health
+            insecureSkipVerify: false
+            responseTimeout: 5000
+            method:
+              get:
+                criteria: ==
+                responseCode: "200"
+
+      - name: "Order creation succeeds"
+        probe:
+          type: cmdProbe
+          cmdProbe/inputs:
+            command: |
+              curl -X POST http://gateway-service:3000/api/orders \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $TEST_TOKEN" \
+                -d '{"merchantId":"test-merchant","items":[{"id":"test-item","quantity":1}]}'
+            comparator:
+              type: int
+              criteria: ==
+              value: "201"
+
+      - name: "Database connections available"
+        probe:
+          type: k8sProbe
+          k8sProbe/inputs:
+            group: v1
+            version: v1
+            resource: pods
+            namespace: reskflow
+            labelSelector: app=postgresql
+            operation: present

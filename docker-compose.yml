@@ -1,0 +1,950 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: reskflow-postgres
+    environment:
+      POSTGRES_USER: reskflow
+      POSTGRES_PASSWORD: reskflow123
+      POSTGRES_DB: reskflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reskflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: reskflow-redis
+    command: redis-server --appendonly yes --requirepass reskflow123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "reskflow123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB
+  mongodb:
+    image: mongo:7
+    container_name: reskflow-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: reskflow
+      MONGO_INITDB_ROOT_PASSWORD: reskflow123
+      MONGO_INITDB_DATABASE: reskflow
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: reskflow-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana (optional, for Elasticsearch visualization)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: reskflow-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - reskflow-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # MinIO (S3-compatible storage for files)
+  minio:
+    image: minio/minio:latest
+    container_name: reskflow-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: reskflow
+      MINIO_ROOT_PASSWORD: reskflow123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # RabbitMQ (for message queuing)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: reskflow-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: reskflow
+      RABBITMQ_DEFAULT_PASS: reskflow123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - reskflow-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Prometheus (for metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: reskflow-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - reskflow-network
+
+  # Grafana (for monitoring dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: reskflow-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=reskflow123
+      - GF_INSTALL_PLUGINS=redis-datasource
+    ports:
+      - "3100:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - reskflow-network
+    depends_on:
+      - prometheus
+
+  # Jaeger (for distributed tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: reskflow-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - reskflow-network
+
+  # NGINX (as reverse proxy)
+  nginx:
+    image: nginx:alpine
+    container_name: reskflow-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - reskflow-network
+    depends_on:
+      - gateway
+
+  # API Gateway
+  gateway:
+    build:
+      context: ./backend/gateway
+      dockerfile: Dockerfile
+    container_name: reskflow-gateway
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      MONGODB_URI: mongodb://reskflow:reskflow123@mongodb:27017/reskflow?authSource=admin
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_EXPIRES_IN: 7d
+      REFRESH_TOKEN_SECRET: your-super-secret-refresh-token-key
+      REFRESH_TOKEN_EXPIRES_IN: 30d
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/gateway:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: npm run dev
+
+  # User Service
+  user-service:
+    build:
+      context: ./backend/services/user
+      dockerfile: Dockerfile
+    container_name: reskflow-user-service
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/services/user:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Payment Service
+  payment-service:
+    build:
+      context: ./backend/services/payment
+      dockerfile: Dockerfile
+    container_name: reskflow-payment-service
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      STRIPE_SECRET_KEY: your-stripe-secret-key
+      STRIPE_WEBHOOK_SECRET: your-stripe-webhook-secret
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./backend/services/payment:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Order Service
+  order-service:
+    build:
+      context: ./backend/services/order
+      dockerfile: Dockerfile
+    container_name: reskflow-order-service
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      RABBITMQ_URL: amqp://reskflow:reskflow123@rabbitmq:5672
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./backend/services/order:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Delivery Service
+  reskflow-service:
+    build:
+      context: ./backend/services/reskflow
+      dockerfile: Dockerfile
+    container_name: reskflow-reskflow-service
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      MAPBOX_ACCESS_TOKEN: your-mapbox-token
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./backend/services/reskflow:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Cart Service
+  cart-service:
+    build:
+      context: ./backend/services/cart
+      dockerfile: Dockerfile
+    container_name: reskflow-cart-service
+    environment:
+      NODE_ENV: development
+      PORT: 3005
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./backend/services/cart:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Security Service
+  security-service:
+    build:
+      context: ./backend/services/security
+      dockerfile: Dockerfile
+    container_name: reskflow-security-service
+    environment:
+      NODE_ENV: development
+      PORT: 3006
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      ENCRYPTION_KEY: your-32-char-encryption-key-here
+    ports:
+      - "3006:3006"
+    volumes:
+      - ./backend/services/security:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Discovery Service
+  discovery-service:
+    build:
+      context: ./backend/services/discovery
+      dockerfile: Dockerfile
+    container_name: reskflow-discovery-service
+    environment:
+      NODE_ENV: development
+      PORT: 3007
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "3007:3007"
+    volumes:
+      - ./backend/services/discovery:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  # Catalog Service
+  catalog-service:
+    build:
+      context: ./backend/services/catalog
+      dockerfile: Dockerfile
+    container_name: reskflow-catalog-service
+    environment:
+      NODE_ENV: development
+      PORT: 3008
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3008:3008"
+    volumes:
+      - ./backend/services/catalog:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Merchant Service
+  merchant-service:
+    build:
+      context: ./backend/services/merchant
+      dockerfile: Dockerfile
+    container_name: reskflow-merchant-service
+    environment:
+      NODE_ENV: development
+      PORT: 3009
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3009:3009"
+    volumes:
+      - ./backend/services/merchant:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Tracking Service
+  tracking-service:
+    build:
+      context: ./backend/services/tracking
+      dockerfile: Dockerfile
+    container_name: reskflow-tracking-service
+    environment:
+      NODE_ENV: development
+      PORT: 3010
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./backend/services/tracking:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Chat Service
+  chat-service:
+    build:
+      context: ./backend/services/chat
+      dockerfile: Dockerfile
+    container_name: reskflow-chat-service
+    environment:
+      NODE_ENV: development
+      PORT: 3011
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3011:3011"
+    volumes:
+      - ./backend/services/chat:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./backend/services/notification
+      dockerfile: Dockerfile
+    container_name: reskflow-notification-service
+    environment:
+      NODE_ENV: development
+      PORT: 3012
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      SENDGRID_API_KEY: your-sendgrid-api-key
+      TWILIO_ACCOUNT_SID: your-twilio-account-sid
+      TWILIO_AUTH_TOKEN: your-twilio-auth-token
+      TWILIO_PHONE_NUMBER: your-twilio-phone-number
+      FCM_SERVER_KEY: your-fcm-server-key
+    ports:
+      - "3012:3012"
+    volumes:
+      - ./backend/services/notification:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Search Service
+  search-service:
+    build:
+      context: ./backend/services/search
+      dockerfile: Dockerfile
+    container_name: reskflow-search-service
+    environment:
+      NODE_ENV: development
+      PORT: 3013
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "3013:3013"
+    volumes:
+      - ./backend/services/search:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  # ID Verification Service
+  id-verification-service:
+    build:
+      context: ./backend/services/id-verification
+      dockerfile: Dockerfile
+    container_name: reskflow-id-verification-service
+    environment:
+      NODE_ENV: development
+      PORT: 3014
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3014:3014"
+    volumes:
+      - ./backend/services/id-verification:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Driver Assignment Service
+  driver-assignment-service:
+    build:
+      context: ./backend/services/driver-assignment
+      dockerfile: Dockerfile
+    container_name: reskflow-driver-assignment-service
+    environment:
+      NODE_ENV: development
+      PORT: 3015
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3015:3015"
+    volumes:
+      - ./backend/services/driver-assignment:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Order Modification Service
+  order-modification-service:
+    build:
+      context: ./backend/services/order-modification
+      dockerfile: Dockerfile
+    container_name: reskflow-order-modification-service
+    environment:
+      NODE_ENV: development
+      PORT: 3016
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3016:3016"
+    volumes:
+      - ./backend/services/order-modification:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Promotions Service
+  promotions-service:
+    build:
+      context: ./backend/services/promotions
+      dockerfile: Dockerfile
+    container_name: reskflow-promotions-service
+    environment:
+      NODE_ENV: development
+      PORT: 3017
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3017:3017"
+    volumes:
+      - ./backend/services/promotions:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Batch Delivery Service
+  batch-reskflow-service:
+    build:
+      context: ./backend/services/batch-reskflow
+      dockerfile: Dockerfile
+    container_name: reskflow-batch-reskflow-service
+    environment:
+      NODE_ENV: development
+      PORT: 3018
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3018:3018"
+    volumes:
+      - ./backend/services/batch-reskflow:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Virtual Restaurant Service
+  virtual-restaurant-service:
+    build:
+      context: ./backend/services/virtual-restaurant
+      dockerfile: Dockerfile
+    container_name: reskflow-virtual-restaurant-service
+    environment:
+      NODE_ENV: development
+      PORT: 3019
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3019:3019"
+    volumes:
+      - ./backend/services/virtual-restaurant:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # AI Recommendation Service
+  ai-recommendation-service:
+    build:
+      context: ./backend/services/ai-recommendation
+      dockerfile: Dockerfile
+    container_name: reskflow-ai-recommendation-service
+    environment:
+      NODE_ENV: development
+      PORT: 3020
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      MONGODB_URI: mongodb://reskflow:reskflow123@mongodb:27017/reskflow?authSource=admin
+    ports:
+      - "3020:3020"
+    volumes:
+      - ./backend/services/ai-recommendation:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ./backend/services/analytics
+      dockerfile: Dockerfile
+    container_name: reskflow-analytics-service
+    environment:
+      NODE_ENV: development
+      PORT: 3021
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "3021:3021"
+    volumes:
+      - ./backend/services/analytics:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  # Optimization Service
+  optimization-service:
+    build:
+      context: ./backend/services/optimization
+      dockerfile: Dockerfile
+    container_name: reskflow-optimization-service
+    environment:
+      NODE_ENV: development
+      PORT: 3022
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3022:3022"
+    volumes:
+      - ./backend/services/optimization:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Monitoring Service
+  monitoring-service:
+    build:
+      context: ./backend/services/monitoring
+      dockerfile: Dockerfile
+    container_name: reskflow-monitoring-service
+    environment:
+      NODE_ENV: development
+      PORT: 3023
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      PROMETHEUS_URL: http://prometheus:9090
+    ports:
+      - "3023:3023"
+    volumes:
+      - ./backend/services/monitoring:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+
+  # Orchestration Service
+  orchestration-service:
+    build:
+      context: ./backend/services/orchestration
+      dockerfile: Dockerfile
+    container_name: reskflow-orchestration-service
+    environment:
+      NODE_ENV: development
+      PORT: 3024
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3024:3024"
+    volumes:
+      - ./backend/services/orchestration:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Quality Control Service
+  quality-control-service:
+    build:
+      context: ./backend/services/quality-control
+      dockerfile: Dockerfile
+    container_name: reskflow-quality-control-service
+    environment:
+      NODE_ENV: development
+      PORT: 3025
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3025:3025"
+    volumes:
+      - ./backend/services/quality-control:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Subscription Service
+  subscription-service:
+    build:
+      context: ./backend/services/subscription
+      dockerfile: Dockerfile
+    container_name: reskflow-subscription-service
+    environment:
+      NODE_ENV: development
+      PORT: 3026
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3026:3026"
+    volumes:
+      - ./backend/services/subscription:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Temperature Monitoring Service
+  temperature-monitoring-service:
+    build:
+      context: ./backend/services/temperature-monitoring
+      dockerfile: Dockerfile
+    container_name: reskflow-temperature-monitoring-service
+    environment:
+      NODE_ENV: development
+      PORT: 3027
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+    ports:
+      - "3027:3027"
+    volumes:
+      - ./backend/services/temperature-monitoring:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Contactless Delivery Service
+  contactless-reskflow-service:
+    build:
+      context: ./backend/services/contactless-reskflow
+      dockerfile: Dockerfile
+    container_name: reskflow-contactless-reskflow-service
+    environment:
+      NODE_ENV: development
+      PORT: 3028
+      DATABASE_URL: postgresql://reskflow:reskflow123@postgres:5432/reskflow
+      REDIS_URL: redis://:reskflow123@redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: reskflow
+      S3_SECRET_KEY: reskflow123
+    ports:
+      - "3028:3028"
+    volumes:
+      - ./backend/services/contactless-reskflow:/app
+      - /app/node_modules
+    networks:
+      - reskflow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+networks:
+  reskflow-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
+  elasticsearch_data:
+  minio_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,453 @@
+// Additional schema for merchant features
+
+enum MerchantType {
+  RESTAURANT
+  GROCERY
+  PHARMACY
+  CONVENIENCE
+  LIQUOR
+  GHOST_KITCHEN
+  VIRTUAL_BRAND
+}
+
+enum MerchantStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum MenuItemStatus {
+  AVAILABLE
+  OUT_OF_STOCK
+  HIDDEN
+  COMING_SOON
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Merchant {
+  id                String            @id @default(cuid())
+  ownerId           String
+  name              String
+  slug              String            @unique
+  type              MerchantType
+  status            MerchantStatus    @default(PENDING_VERIFICATION)
+  description       String?
+  logo              String?
+  banner            String?
+  cuisineTypes      String[]
+  dietaryOptions    String[]
+  
+  // Business details
+  businessName      String
+  businessLicense   String?
+  taxId             String?
+  bankAccount       Json?
+  
+  // Contact
+  email             String
+  phone             String
+  website           String?
+  
+  // Settings
+  isOpen            Boolean           @default(false)
+  autoAcceptOrders  Boolean           @default(false)
+  preparationTime   Int               @default(30) // minutes
+  minOrderAmount    Float             @default(0)
+  maxOrderAmount    Float?
+  reskflowRadius    Float             @default(5) // km
+  
+  // Commission and fees
+  commissionRate    Float             @default(0.20) // 20%
+  reskflowFee       Float             @default(0)
+  serviceFee        Float             @default(0)
+  
+  // Features
+  acceptsScheduledOrders Boolean       @default(true)
+  acceptsCashPayment    Boolean        @default(false)
+  providesUtensils      Boolean        @default(true)
+  alcoholLicense        String?
+  
+  // Ratings
+  rating            Float             @default(0)
+  totalRatings      Int               @default(0)
+  totalOrders       Int               @default(0)
+  
+  // Blockchain
+  walletAddress     String?
+  smartContractAddress String?
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  verifiedAt        DateTime?
+  
+  owner             User              @relation(fields: [ownerId], references: [id])
+  locations         MerchantLocation[]
+  menus             Menu[]
+  menuItems         MenuItem[]
+  orders            Order[]
+  promotions        Promotion[]
+  reviews           MerchantReview[]
+  operatingHours    OperatingHours[]
+  staff             MerchantStaff[]
+  
+  @@index([slug])
+  @@index([type])
+  @@index([status])
+  @@index([rating])
+}
+
+model MerchantLocation {
+  id                String            @id @default(cuid())
+  merchantId        String
+  isPrimary         Boolean           @default(false)
+  name              String
+  
+  // Address
+  street            String
+  city              String
+  state             String
+  country           String
+  postalCode        String
+  latitude          Float
+  longitude         Float
+  
+  // Contact
+  phone             String?
+  email             String?
+  
+  // Settings
+  isActive          Boolean           @default(true)
+  reskflowRadius    Float?
+  hasPickup         Boolean           @default(true)
+  hasDelivery       Boolean           @default(true)
+  hasDineIn         Boolean           @default(false)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  operatingHours    OperatingHours[]
+  orders            Order[]
+  
+  @@index([merchantId])
+  @@index([latitude, longitude])
+}
+
+model Menu {
+  id                String            @id @default(cuid())
+  merchantId        String
+  name              String
+  description       String?
+  isActive          Boolean           @default(true)
+  sortOrder         Int               @default(0)
+  
+  // Schedule
+  availableFrom     DateTime?
+  availableTo       DateTime?
+  availableDays     Int[]             // 0-6 (Sun-Sat)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  categories        MenuCategory[]
+  
+  @@index([merchantId])
+}
+
+model MenuCategory {
+  id                String            @id @default(cuid())
+  menuId            String
+  name              String
+  description       String?
+  sortOrder         Int               @default(0)
+  isActive          Boolean           @default(true)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  menu              Menu              @relation(fields: [menuId], references: [id])
+  items             MenuItem[]
+  
+  @@index([menuId])
+}
+
+model MenuItem {
+  id                String            @id @default(cuid())
+  merchantId        String
+  categoryId        String
+  sku               String?
+  name              String
+  description       String?
+  images            String[]
+  
+  // Pricing
+  price             Float
+  compareAtPrice    Float?
+  cost              Float?
+  
+  // Inventory
+  trackInventory    Boolean           @default(false)
+  quantity          Int               @default(0)
+  lowStockThreshold Int               @default(10)
+  
+  // Status
+  status            MenuItemStatus    @default(AVAILABLE)
+  isPopular         Boolean           @default(false)
+  isNew             Boolean           @default(false)
+  isSpicy           Boolean           @default(false)
+  isVegetarian      Boolean           @default(false)
+  isVegan           Boolean           @default(false)
+  isGlutenFree      Boolean           @default(false)
+  
+  // Nutrition
+  calories          Int?
+  nutritionInfo     Json?
+  allergens         String[]
+  
+  // Settings
+  preparationTime   Int?              // Override merchant default
+  maxQuantityPerOrder Int?
+  
+  // Analytics
+  totalOrdered      Int               @default(0)
+  totalRevenue      Float             @default(0)
+  
+  sortOrder         Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  category          MenuCategory      @relation(fields: [categoryId], references: [id])
+  modifierGroups    ModifierGroup[]
+  orderItems        OrderItem[]
+  
+  @@index([merchantId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([sku])
+}
+
+model ModifierGroup {
+  id                String            @id @default(cuid())
+  menuItemId        String
+  name              String
+  description       String?
+  isRequired        Boolean           @default(false)
+  minSelections     Int               @default(0)
+  maxSelections     Int               @default(1)
+  sortOrder         Int               @default(0)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  menuItem          MenuItem          @relation(fields: [menuItemId], references: [id])
+  modifiers         Modifier[]
+  
+  @@index([menuItemId])
+}
+
+model Modifier {
+  id                String            @id @default(cuid())
+  groupId           String
+  name              String
+  price             Float             @default(0)
+  isDefault         Boolean           @default(false)
+  maxQuantity       Int               @default(1)
+  sortOrder         Int               @default(0)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  group             ModifierGroup     @relation(fields: [groupId], references: [id])
+  
+  @@index([groupId])
+}
+
+model OperatingHours {
+  id                String            @id @default(cuid())
+  merchantId        String?
+  locationId        String?
+  dayOfWeek         Int               // 0-6 (Sun-Sat)
+  openTime          String            // HH:MM
+  closeTime         String            // HH:MM
+  isOpen            Boolean           @default(true)
+  
+  merchant          Merchant?         @relation(fields: [merchantId], references: [id])
+  location          MerchantLocation? @relation(fields: [locationId], references: [id])
+  
+  @@index([merchantId])
+  @@index([locationId])
+  @@unique([merchantId, dayOfWeek])
+  @@unique([locationId, dayOfWeek])
+}
+
+model Order {
+  id                String            @id @default(cuid())
+  orderNumber       String            @unique
+  customerId        String
+  merchantId        String
+  locationId        String
+  reskflowId        String?           @unique
+  
+  // Type
+  type              String            // DELIVERY, PICKUP, DINE_IN
+  status            OrderStatus       @default(PENDING)
+  
+  // Scheduling
+  isScheduled       Boolean           @default(false)
+  scheduledFor      DateTime?
+  
+  // Amounts
+  subtotal          Float
+  tax               Float
+  reskflowFee       Float
+  serviceFee        Float
+  tip               Float             @default(0)
+  discount          Float             @default(0)
+  total             Float
+  
+  // Payment
+  paymentMethod     String
+  paymentStatus     PaymentStatus     @default(PENDING)
+  
+  // Instructions
+  instructions      String?
+  utensils          Boolean           @default(true)
+  leaveAtDoor      Boolean           @default(false)
+  
+  // Timestamps
+  acceptedAt        DateTime?
+  preparingAt       DateTime?
+  readyAt           DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  cancelledAt       DateTime?
+  
+  // Merchant response
+  estimatedReadyTime DateTime?
+  rejectionReason   String?
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  customer          User              @relation(fields: [customerId], references: [id])
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  location          MerchantLocation  @relation(fields: [locationId], references: [id])
+  reskflow          Delivery?         @relation(fields: [reskflowId], references: [id])
+  items             OrderItem[]
+  
+  @@index([orderNumber])
+  @@index([customerId])
+  @@index([merchantId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                String            @id @default(cuid())
+  orderId           String
+  menuItemId        String
+  quantity          Int
+  price             Float
+  totalPrice        Float
+  specialRequest    String?
+  modifiers         Json?             // Selected modifiers with prices
+  
+  order             Order             @relation(fields: [orderId], references: [id])
+  menuItem          MenuItem          @relation(fields: [menuItemId], references: [id])
+  
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model Promotion {
+  id                String            @id @default(cuid())
+  merchantId        String
+  code              String            @unique
+  name              String
+  description       String?
+  type              String            // PERCENTAGE, FIXED_AMOUNT, BOGO, FREE_DELIVERY
+  value             Float
+  
+  // Conditions
+  minOrderAmount    Float?
+  maxDiscount       Float?
+  validFrom         DateTime
+  validTo           DateTime
+  usageLimit        Int?
+  usageCount        Int               @default(0)
+  perUserLimit      Int?
+  
+  // Restrictions
+  applicableItems   String[]          // MenuItem IDs
+  excludedItems     String[]
+  newUsersOnly      Boolean           @default(false)
+  
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  
+  @@index([merchantId])
+  @@index([code])
+  @@index([validFrom, validTo])
+}
+
+model MerchantReview {
+  id                String            @id @default(cuid())
+  merchantId        String
+  customerId        String
+  orderId           String?
+  rating            Int               // 1-5
+  comment           String?
+  images            String[]
+  
+  // Ratings breakdown
+  foodRating        Int?
+  reskflowRating    Int?
+  valueRating       Int?
+  
+  isVerified        Boolean           @default(false)
+  helpfulCount      Int               @default(0)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  
+  @@index([merchantId])
+  @@index([customerId])
+  @@index([rating])
+}
+
+model MerchantStaff {
+  id                String            @id @default(cuid())
+  merchantId        String
+  userId            String
+  role              String            // OWNER, MANAGER, STAFF
+  permissions       String[]
+  isActive          Boolean           @default(true)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  merchant          Merchant          @relation(fields: [merchantId], references: [id])
+  
+  @@index([merchantId])
+  @@index([userId])
+  @@unique([merchantId, userId])
+}

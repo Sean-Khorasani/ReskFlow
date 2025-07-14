@@ -1,0 +1,253 @@
+# Network Chaos Scenarios for ReskFlow
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: network-chaos-suite
+  namespace: reskflow
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "pods/exec", "events"]
+        verbs: ["create", "list", "get", "patch", "update", "delete"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "list", "get", "delete", "deletecollection"]
+    image: "litmuschaos/go-runner:latest"
+    args:
+    - -c
+    - ./experiments -name network-chaos
+    command:
+    - /bin/bash
+    env:
+    - name: TOTAL_CHAOS_DURATION
+      value: '60'
+    - name: CHAOS_INTERVAL
+      value: '10'
+    - name: RAMP_TIME
+      value: '10'
+    labels:
+      name: network-chaos-suite
+      app.kubernetes.io/part-of: litmus
+---
+# Scenario 1: Service-to-Service Latency
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: order-payment-latency
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=order-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-latency
+      spec:
+        components:
+          env:
+            - name: NETWORK_INTERFACE
+              value: 'eth0'
+            - name: TARGET_CONTAINER
+              value: 'order-service'
+            - name: NETWORK_LATENCY
+              value: '3000' # 3 seconds latency
+            - name: JITTER
+              value: '1000' # 1 second jitter
+            - name: TOTAL_CHAOS_DURATION
+              value: '300' # 5 minutes
+            - name: DESTINATION_IPS
+              value: 'payment-service.reskflow.svc.cluster.local'
+            - name: DESTINATION_PORTS
+              value: '3003'
+        probe:
+          - name: check-order-creation-time
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job='order-service', handler='/api/orders', method='POST'}[5m]))"
+              comparator:
+                type: float
+                criteria: "<"
+                value: "5" # Should be less than 5 seconds
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+---
+# Scenario 2: Random Packet Loss
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: reskflow-tracking-packet-loss
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=reskflow-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-loss
+      spec:
+        components:
+          env:
+            - name: NETWORK_INTERFACE
+              value: 'eth0'
+            - name: TARGET_CONTAINER
+              value: 'reskflow-service'
+            - name: NETWORK_PACKET_LOSS_PERCENTAGE
+              value: '30' # 30% packet loss
+            - name: TOTAL_CHAOS_DURATION
+              value: '180' # 3 minutes
+            - name: DESTINATION_IPS
+              value: 'tracking-service.reskflow.svc.cluster.local'
+        probe:
+          - name: check-tracking-updates
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://gateway-service:3000/api/orders/test-order/tracking"
+              insecureSkipVerify: false
+              responseTimeout: 10000
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 15
+              interval: 20
+              retry: 5
+---
+# Scenario 3: Network Partition - Split Brain
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: database-network-partition
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=postgresql'
+    appkind: 'statefulset'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-partition
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: '120' # 2 minutes
+            - name: POLICY_TYPES
+              value: 'egress'
+            - name: POD_SELECTOR
+              value: 'app=postgresql,statefulset.kubernetes.io/pod-name=postgresql-1'
+            - name: DESTINATION_IPS
+              value: 'postgresql-0.postgresql-headless.reskflow.svc.cluster.local,postgresql-2.postgresql-headless.reskflow.svc.cluster.local'
+        probe:
+          - name: check-database-consistency
+            type: cmdProbe
+            mode: EOT
+            cmdProbe/inputs:
+              command: |
+                kubectl exec -n reskflow postgresql-0 -- psql -U postgres -c "SELECT COUNT(*) FROM orders;" | grep -E '[0-9]+' | head -1
+              comparator:
+                type: string
+                criteria: "contains"
+                value: "[0-9]+"
+            runProperties:
+              probeTimeout: 30
+              retry: 3
+---
+# Scenario 4: DNS Chaos
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: dns-chaos
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=user-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-dns-error
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: '60'
+            - name: TARGET_CONTAINER
+              value: 'user-service'
+            - name: TARGET_HOSTNAMES
+              value: 'redis-service.reskflow.svc.cluster.local'
+            - name: MATCH_SCHEME
+              value: 'exact'
+        probe:
+          - name: check-service-resilience
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://user-service:3001/health"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 5
+              interval: 10
+              retry: 3
+---
+# Scenario 5: Bandwidth Restriction
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: bandwidth-restriction
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=merchant-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-network-bandwidth
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: '180'
+            - name: NETWORK_INTERFACE
+              value: 'eth0'
+            - name: NETWORK_BANDWIDTH
+              value: '1' # 1 Mbps
+            - name: TARGET_CONTAINER
+              value: 'merchant-service'
+        probe:
+          - name: check-image-upload-performance
+            type: cmdProbe
+            mode: Continuous
+            cmdProbe/inputs:
+              command: |
+                time curl -X POST http://merchant-service:3004/api/merchants/test/menu/items \
+                  -H "Content-Type: multipart/form-data" \
+                  -F "image=@/tmp/test-image.jpg" \
+                  -w "\n%{time_total}" | tail -1
+              comparator:
+                type: float
+                criteria: "<"
+                value: "10" # Should complete within 10 seconds
+            runProperties:
+              probeTimeout: 15
+              interval: 30
+              retry: 2

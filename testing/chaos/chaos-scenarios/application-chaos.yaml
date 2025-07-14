@@ -1,0 +1,314 @@
+# Application-Level Chaos Scenarios for ReskFlow
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: application-chaos-suite
+  namespace: reskflow
+spec:
+  definition:
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "pods/exec", "events", "configmaps"]
+        verbs: ["create", "list", "get", "patch", "update", "delete"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "list", "get", "delete", "deletecollection"]
+    image: "litmuschaos/go-runner:latest"
+    labels:
+      name: application-chaos-suite
+      app.kubernetes.io/part-of: litmus
+---
+# Scenario 1: Database Connection Pool Exhaustion
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: db-connection-exhaustion
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=order-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: connection-pool-chaos
+      spec:
+        components:
+          env:
+            - name: TARGET_SERVICE_ENDPOINT
+              value: 'http://order-service:3002/chaos/exhaust-db-connections'
+            - name: CONNECTION_COUNT
+              value: '100' # Create 100 connections
+            - name: HOLD_DURATION
+              value: '180' # Hold for 3 minutes
+            - name: TOTAL_CHAOS_DURATION
+              value: '240'
+        probe:
+          - name: check-order-creation
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://gateway-service:3000/api/orders"
+              insecureSkipVerify: false
+              responseTimeout: 30000
+              method:
+                post:
+                  contentType: "application/json"
+                  body: '{"merchantId":"test-merchant","items":[{"id":"test-item","quantity":1}]}'
+                  criteria: "!="
+                  responseCode: "503"
+            runProperties:
+              probeTimeout: 35
+              interval: 30
+              retry: 3
+---
+# Scenario 2: Cache Invalidation Storm
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: cache-invalidation-storm
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=redis'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: redis-cache-invalidation
+      spec:
+        components:
+          env:
+            - name: REDIS_COMMAND
+              value: 'FLUSHDB'
+            - name: INVALIDATION_PATTERN
+              value: 'user:*,merchant:*,order:*'
+            - name: INVALIDATION_RATE
+              value: '100' # 100 invalidations per second
+            - name: TOTAL_CHAOS_DURATION
+              value: '120'
+        probe:
+          - name: check-cache-hit-rate
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)"
+              comparator:
+                type: float
+                criteria: ">"
+                value: "0.5" # Cache hit rate should remain above 50%
+            runProperties:
+              probeTimeout: 10
+              interval: 20
+              retry: 3
+---
+# Scenario 3: Message Queue Overflow
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: kafka-queue-overflow
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=kafka'
+    appkind: 'statefulset'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: kafka-message-flood
+      spec:
+        components:
+          env:
+            - name: KAFKA_BROKERS
+              value: 'kafka-0.kafka-headless:9092,kafka-1.kafka-headless:9092'
+            - name: TOPIC_NAME
+              value: 'order-events'
+            - name: MESSAGE_SIZE
+              value: '10240' # 10KB messages
+            - name: MESSAGES_PER_SECOND
+              value: '1000'
+            - name: TOTAL_CHAOS_DURATION
+              value: '180'
+        probe:
+          - name: check-consumer-lag
+            type: cmdProbe
+            mode: Continuous
+            cmdProbe/inputs:
+              command: |
+                kafka-consumer-groups.sh --bootstrap-server kafka-0.kafka-headless:9092 \
+                  --group order-processor --describe | grep LAG | awk '{sum+=$5} END {print sum}'
+              comparator:
+                type: int
+                criteria: "<"
+                value: "10000" # Consumer lag should not exceed 10k messages
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+---
+# Scenario 4: API Rate Limit Testing
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: api-rate-limit-test
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=gateway-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: api-flood
+      spec:
+        components:
+          env:
+            - name: TARGET_ENDPOINT
+              value: 'http://gateway-service:3000/api/merchants'
+            - name: REQUEST_RATE
+              value: '500' # 500 requests per second
+            - name: CONCURRENT_USERS
+              value: '50'
+            - name: REQUEST_TIMEOUT
+              value: '5000'
+            - name: TOTAL_CHAOS_DURATION
+              value: '300'
+        probe:
+          - name: check-rate-limiting
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "sum(rate(http_requests_total{status='429'}[1m]))"
+              comparator:
+                type: float
+                criteria: ">"
+                value: "0" # Rate limiting should be triggered
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+          - name: check-legitimate-traffic
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://gateway-service:3000/api/health"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 5
+              interval: 15
+              retry: 3
+---
+# Scenario 5: Cascading Service Failure
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: cascading-failure-simulation
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'tier=backend'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: cascading-failure
+      spec:
+        components:
+          env:
+            - name: FAILURE_SEQUENCE
+              value: |
+                [
+                  {"service": "user-service", "delay": 0, "type": "latency", "value": 5000},
+                  {"service": "order-service", "delay": 30, "type": "error", "value": 50},
+                  {"service": "payment-service", "delay": 60, "type": "crash", "value": 1},
+                  {"service": "reskflow-service", "delay": 90, "type": "latency", "value": 10000}
+                ]
+            - name: TOTAL_CHAOS_DURATION
+              value: '300'
+        probe:
+          - name: check-circuit-breakers
+            type: promProbe
+            mode: Continuous
+            promProbe/inputs:
+              endpoint: "http://prometheus:9090"
+              query: "sum(circuit_breaker_state{state='open'})"
+              comparator:
+                type: int
+                criteria: "<="
+                value: "2" # No more than 2 circuit breakers should be open
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3
+          - name: check-system-recovery
+            type: httpProbe
+            mode: EOT
+            httpProbe/inputs:
+              url: "http://gateway-service:3000/api/health/deep"
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: "=="
+                  responseCode: "200"
+            runProperties:
+              probeTimeout: 30
+              retry: 5
+---
+# Scenario 6: Configuration Drift
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: config-drift-chaos
+  namespace: reskflow
+spec:
+  engineState: 'active'
+  appinfo:
+    appns: 'reskflow'
+    applabel: 'app=merchant-service'
+    appkind: 'deployment'
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: config-mutation
+      spec:
+        components:
+          env:
+            - name: CONFIGMAP_NAME
+              value: 'merchant-service-config'
+            - name: CONFIG_MUTATIONS
+              value: |
+                [
+                  {"key": "DELIVERY_RADIUS", "value": "1"},
+                  {"key": "MIN_ORDER_AMOUNT", "value": "1000"},
+                  {"key": "MAX_ITEMS_PER_ORDER", "value": "1"}
+                ]
+            - name: TOTAL_CHAOS_DURATION
+              value: '180'
+        probe:
+          - name: check-service-functionality
+            type: httpProbe
+            mode: Continuous
+            httpProbe/inputs:
+              url: "http://merchant-service:3004/api/merchants/test/validate-order"
+              insecureSkipVerify: false
+              method:
+                post:
+                  contentType: "application/json"
+                  body: '{"items":[{"id":"item1","quantity":2}],"reskflowAddress":{"distance":5}}'
+                  criteria: "!="
+                  responseCode: "500"
+            runProperties:
+              probeTimeout: 10
+              interval: 30
+              retry: 3

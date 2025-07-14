@@ -1,0 +1,30 @@
+{
+  "name": "@reskflow/blockchain",
+  "version": "1.0.0",
+  "description": "Blockchain smart contracts for ReskFlow",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:polygon": "hardhat run scripts/deploy.ts --network polygon",
+    "verify": "hardhat verify",
+    "coverage": "hardhat coverage",
+    "gas-report": "REPORT_GAS=true hardhat test",
+    "dev": "hardhat node"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1",
+    "@openzeppelin/contracts-upgradeable": "^5.0.1",
+    "ethers": "^6.9.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.2",
+    "hardhat": "^2.19.2",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.5",
+    "@types/mocha": "^10.0.6",
+    "chai": "^4.3.10"
+  }
+}

@@ -1,0 +1,284 @@
+# OWASP ZAP API Security Test Configuration
+# Specific tests for REST API endpoints
+
+name: "ReskFlow API Security Tests"
+description: "Comprehensive API security testing based on OWASP API Security Top 10"
+
+tests:
+  # API1:2019 - Broken Object Level Authorization
+  - name: "Broken Object Level Authorization"
+    endpoints:
+      - url: "/api/users/{userId}"
+        method: "GET"
+        tests:
+          - name: "Access other user's profile"
+            auth: "user1"
+            params:
+              userId: "user2-id"
+            expectedStatus: 403
+          
+      - url: "/api/orders/{orderId}"
+        method: "GET"
+        tests:
+          - name: "Access other user's order"
+            auth: "customer1"
+            params:
+              orderId: "customer2-order-id"
+            expectedStatus: 403
+            
+      - url: "/api/merchants/{merchantId}/analytics"
+        method: "GET"
+        tests:
+          - name: "Access other merchant's analytics"
+            auth: "merchant1"
+            params:
+              merchantId: "merchant2-id"
+            expectedStatus: 403
+
+  # API2:2019 - Broken User Authentication
+  - name: "Broken User Authentication"
+    endpoints:
+      - url: "/api/auth/login"
+        method: "POST"
+        tests:
+          - name: "Brute force protection"
+            iterations: 10
+            data:
+              email: "test@example.com"
+              password: "wrong-password-{iteration}"
+            expectedBehavior: "Rate limiting after 5 attempts"
+            
+          - name: "Weak password acceptance"
+            data:
+              email: "newuser@example.com"
+              password: "12345"
+            expectedStatus: 400
+            
+          - name: "JWT token validation"
+            headers:
+              Authorization: "Bearer malformed.jwt.token"
+            expectedStatus: 401
+
+  # API3:2019 - Excessive Data Exposure
+  - name: "Excessive Data Exposure"
+    endpoints:
+      - url: "/api/users/profile"
+        method: "GET"
+        tests:
+          - name: "Check for sensitive data exposure"
+            auth: "customer"
+            sensitiveFields:
+              shouldNotContain:
+                - "password"
+                - "passwordHash"
+                - "salt"
+                - "securityAnswer"
+                - "creditCardNumber"
+                - "cvv"
+                
+      - url: "/api/orders"
+        method: "GET"
+        tests:
+          - name: "Check order data exposure"
+            auth: "customer"
+            sensitiveFields:
+              shouldNotContain:
+                - "paymentMethod.cardNumber"
+                - "paymentMethod.cvv"
+                - "internalNotes"
+
+  # API4:2019 - Lack of Resources & Rate Limiting
+  - name: "Lack of Resources & Rate Limiting"
+    endpoints:
+      - url: "/api/merchants"
+        method: "GET"
+        tests:
+          - name: "Large result set handling"
+            params:
+              limit: 10000
+            expectedBehavior: "Should enforce maximum limit"
+            
+          - name: "Rate limiting test"
+            iterations: 100
+            concurrent: true
+            expectedBehavior: "Should rate limit after threshold"
+            
+      - url: "/api/orders"
+        method: "POST"
+        tests:
+          - name: "Bulk order creation"
+            iterations: 50
+            concurrent: true
+            expectedBehavior: "Should prevent bulk creation"
+
+  # API5:2019 - Broken Function Level Authorization
+  - name: "Broken Function Level Authorization"
+    endpoints:
+      - url: "/api/admin/users"
+        method: "GET"
+        tests:
+          - name: "Non-admin access to admin endpoint"
+            auth: "customer"
+            expectedStatus: 403
+            
+      - url: "/api/merchants/{merchantId}/payout"
+        method: "POST"
+        tests:
+          - name: "Customer accessing merchant function"
+            auth: "customer"
+            expectedStatus: 403
+            
+      - url: "/api/system/config"
+        method: "PUT"
+        tests:
+          - name: "Regular user modifying system config"
+            auth: "merchant"
+            expectedStatus: 403
+
+  # API6:2019 - Mass Assignment
+  - name: "Mass Assignment"
+    endpoints:
+      - url: "/api/users/profile"
+        method: "PUT"
+        tests:
+          - name: "Attempt to escalate privileges"
+            auth: "customer"
+            data:
+              role: "ADMIN"
+              isVerified: true
+              creditLimit: 999999
+            shouldNotUpdate:
+              - "role"
+              - "isVerified"
+              - "creditLimit"
+              
+      - url: "/api/orders"
+        method: "POST"
+        tests:
+          - name: "Manipulate order pricing"
+            auth: "customer"
+            data:
+              items: [{ menuItemId: "item-1", quantity: 1, price: 0.01 }]
+              total: 0.01
+              discount: 99.99
+            shouldValidate: "Server should calculate prices"
+
+  # API7:2019 - Security Misconfiguration
+  - name: "Security Misconfiguration"
+    global:
+      - name: "Security headers"
+        headers:
+          shouldContain:
+            X-Content-Type-Options: "nosniff"
+            X-Frame-Options: "DENY"
+            X-XSS-Protection: "1; mode=block"
+            Strict-Transport-Security: "max-age=31536000"
+            
+      - name: "Error handling"
+        tests:
+          - url: "/api/nonexistent"
+            shouldNotContain:
+              - "stack trace"
+              - "database error"
+              - "internal server"
+              
+      - name: "HTTP methods"
+        tests:
+          - url: "/api/users"
+            method: "TRACE"
+            expectedStatus: 405
+          - url: "/api/users"
+            method: "OPTIONS"
+            shouldValidateCORS: true
+
+  # API8:2019 - Injection
+  - name: "Injection"
+    endpoints:
+      - url: "/api/merchants"
+        method: "GET"
+        tests:
+          - name: "SQL Injection in search"
+            params:
+              search: "'; DROP TABLE users; --"
+              cuisine: "italian' OR '1'='1"
+            expectedBehavior: "Should sanitize input"
+            
+          - name: "NoSQL Injection"
+            params:
+              filter: '{"$where": "this.credits > 0"}'
+            expectedBehavior: "Should reject query operators"
+            
+      - url: "/api/orders/{orderId}/notes"
+        method: "POST"
+        tests:
+          - name: "XSS in order notes"
+            data:
+              note: '<script>alert("XSS")</script>'
+            expectedBehavior: "Should escape HTML"
+
+  # API9:2019 - Improper Assets Management
+  - name: "Improper Assets Management"
+    tests:
+      - name: "Check for old API versions"
+        urls:
+          - "/api/v1/users"
+          - "/api/v0/orders"
+          - "/api/beta/merchants"
+        expectedStatus: [404, 410]
+        
+      - name: "Check for debug endpoints"
+        urls:
+          - "/api/debug"
+          - "/api/test"
+          - "/api/swagger"
+          - "/api/docs"
+        expectedBehavior: "Should not exist in production"
+
+  # API10:2019 - Insufficient Logging & Monitoring
+  - name: "Insufficient Logging & Monitoring"
+    tests:
+      - name: "Security event logging"
+        scenarios:
+          - "Failed login attempts"
+          - "Authorization failures"
+          - "Input validation errors"
+          - "Rate limit violations"
+        shouldLog: true
+        shouldAlert: true
+        
+      - name: "Audit trail"
+        actions:
+          - "User registration"
+          - "Order creation"
+          - "Payment processing"
+          - "Profile updates"
+        shouldCreateAuditLog: true
+
+# Additional API-specific tests
+additionalTests:
+  - name: "JWT Security"
+    tests:
+      - "Algorithm confusion attack"
+      - "Null signature"
+      - "Weak secret key"
+      - "Token expiration validation"
+      - "Token refresh security"
+      
+  - name: "File Upload Security"
+    endpoints:
+      - "/api/users/avatar"
+      - "/api/merchants/logo"
+      - "/api/products/images"
+    tests:
+      - "File type validation"
+      - "File size limits"
+      - "Malware scanning"
+      - "Path traversal"
+      
+  - name: "Business Logic"
+    tests:
+      - "Order without payment"
+      - "Negative quantity orders"
+      - "Price manipulation"
+      - "Coupon stacking"
+      - "Race conditions"

@@ -1,0 +1,36 @@
+{
+  "watch": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    ".env"
+  ],
+  "ext": "ts,js,json",
+  "ignore": [
+    "node_modules/**/*",
+    "dist/**/*",
+    "logs/**/*",
+    "uploads/**/*",
+    "*.test.ts",
+    "*.spec.ts",
+    "coverage/**/*"
+  ],
+  "exec": "ts-node --transpile-only src/index.ts",
+  "env": {
+    "NODE_ENV": "development",
+    "DEBUG": "reskflow:*"
+  },
+  "restartable": "rs",
+  "colours": true,
+  "verbose": true,
+  "delay": 1000,
+  "runOnChangeOnly": false,
+  "inspect": false,
+  "signal": "SIGTERM",
+  "events": {
+    "start": "echo \"🚀 Delivery service starting...\"",
+    "restart": "echo \"🔄 Delivery service restarting due to file changes...\"",
+    "crash": "echo \"💥 Delivery service crashed!\"",
+    "exit": "echo \"👋 Delivery service stopped.\""
+  },
+  "legacy": false
+}

@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+  RETURNED
+}
+
+enum DeliveryType {
+  STANDARD
+  EXPRESS
+  SCHEDULED
+  PICKUP
+}
+
+enum VehicleType {
+  BIKE
+  SCOOTER
+  CAR
+  VAN
+  TRUCK
+  WALKING
+}
+
+model Delivery {
+  id              String        @id @default(uuid())
+  reskflowNumber  String        @unique
+  orderId         String        @unique
+  customerId      String
+  merchantId      String
+  driverId        String?
+  
+  reskflowType    DeliveryType  @default(STANDARD)
+  status          DeliveryStatus @default(PENDING)
+  
+  pickupAddress   Json
+  reskflowAddress Json
+  
+  estimatedTime   DateTime?
+  scheduledTime   DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+  
+  distance        Float?        // in kilometers
+  duration        Int?          // in minutes
+  reskflowFee     Float
+  
+  instructions    String?
+  notes           String?
+  
+  tracking        DeliveryTracking[]
+  timeline        DeliveryTimeline[]
+  route           DeliveryRoute?
+  proof           DeliveryProof?
+  
+  metadata        Json?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([driverId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([merchantId])
+}
+
+model DeliveryTracking {
+  id          String    @id @default(uuid())
+  reskflowId  String
+  reskflow    Delivery  @relation(fields: [reskflowId], references: [id], onDelete: Cascade)
+  
+  latitude    Float
+  longitude   Float
+  accuracy    Float?
+  heading     Float?
+  speed       Float?
+  
+  timestamp   DateTime  @default(now())
+  
+  @@index([reskflowId])
+  @@index([timestamp])
+}
+
+model DeliveryTimeline {
+  id          String        @id @default(uuid())
+  reskflowId  String
+  reskflow    Delivery      @relation(fields: [reskflowId], references: [id], onDelete: Cascade)
+  
+  status      DeliveryStatus
+  message     String
+  location    Json?
+  actor       String?       // userId or system
+  metadata    Json?
+  
+  createdAt   DateTime      @default(now())
+  
+  @@index([reskflowId])
+  @@index([createdAt])
+}
+
+model DeliveryRoute {
+  id          String    @id @default(uuid())
+  reskflowId  String    @unique
+  reskflow    Delivery  @relation(fields: [reskflowId], references: [id], onDelete: Cascade)
+  
+  waypoints   Json      // Array of {lat, lng, address}
+  distance    Float
+  duration    Int
+  
+  optimized   Boolean   @default(false)
+  algorithm   String?   // routing algorithm used
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model DeliveryProof {
+  id          String    @id @default(uuid())
+  reskflowId  String    @unique
+  reskflow    Delivery  @relation(fields: [reskflowId], references: [id], onDelete: Cascade)
+  
+  photos      Json      // Array of photo URLs
+  signature   String?   // Base64 encoded signature
+  notes       String?
+  
+  recipientName    String?
+  recipientContact String?
+  
+  location    Json?     // Delivery location coordinates
+  timestamp   DateTime  @default(now())
+  
+  createdAt   DateTime  @default(now())
+}
+
+model Driver {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  licenseNumber   String      @unique
+  
+  vehicleType     VehicleType
+  vehicleDetails  Json        // make, model, year, plate, etc.
+  
+  isActive        Boolean     @default(true)
+  isOnline        Boolean     @default(false)
+  isAvailable     Boolean     @default(true)
+  
+  currentLocation Json?       // {lat, lng, accuracy, timestamp}
+  serviceArea     Json?       // Array of coordinates defining service area
+  
+  rating          Float?
+  completedDeliveries Int     @default(0)
+  
+  verificationStatus String   @default("PENDING") // PENDING, VERIFIED, REJECTED
+  documents       Json?       // URLs to verification documents
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([isActive, isOnline, isAvailable])
+  @@index([vehicleType])
+}
+
+model DeliveryZone {
+  id          String    @id @default(uuid())
+  name        String
+  polygon     Json      // Array of coordinates defining the zone
+  
+  isActive    Boolean   @default(true)
+  baseFee     Float
+  perKmFee    Float
+  
+  workingHours Json     // {start, end} for each day of week
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

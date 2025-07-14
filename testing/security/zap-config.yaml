@@ -1,0 +1,176 @@
+# OWASP ZAP Configuration for ReskFlow Security Testing
+
+env:
+  contexts:
+    - name: "ReskFlow API"
+      urls:
+        - "http://localhost:3000"
+        - "http://localhost:3000/api"
+      includePaths:
+        - "http://localhost:3000/api/.*"
+      excludePaths:
+        - ".*\\.js"
+        - ".*\\.css"
+        - ".*\\.png"
+        - ".*\\.jpg"
+        - ".*\\.gif"
+        - ".*\\.ico"
+      authentication:
+        method: "json"
+        loginUrl: "http://localhost:3000/api/auth/login"
+        loginRequestData: '{"email": "{%username%}", "password": "{%password%}"}'
+        loggedInIndicator: "accessToken"
+      sessionManagement:
+        method: "httpAuthSessionManagement"
+        parameters:
+          headerName: "Authorization"
+          headerValue: "Bearer {%token%}"
+      users:
+        - name: "test-customer"
+          credentials:
+            username: "customer@test.com"
+            password: "Test123!@#"
+        - name: "test-merchant" 
+          credentials:
+            username: "merchant@test.com"
+            password: "Test123!@#"
+        - name: "test-driver"
+          credentials:
+            username: "driver@test.com"
+            password: "Test123!@#"
+        - name: "test-admin"
+          credentials:
+            username: "admin@test.com"
+            password: "Test123!@#"
+
+jobs:
+  - type: "spider"
+    parameters:
+      maxDuration: 10
+      maxDepth: 10
+      maxChildren: 0
+      acceptCookies: true
+      handleODataParametersVisited: true
+      handleParameters: "IGNORE_COMPLETELY"
+      parseComments: true
+      parseGit: false
+      parseRobotsTxt: false
+      parseSitemapXml: false
+      parseSVNEntries: false
+      postForm: true
+      processForm: true
+      requestWaitTime: 0
+      sendRefererHeader: true
+      threadCount: 5
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+  - type: "passiveScan-wait"
+    parameters:
+      maxDuration: 5
+
+  - type: "activeScan"
+    parameters:
+      context: "ReskFlow API"
+      recurse: true
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 60
+      delayInMs: 20
+      threadPerHost: 2
+      addQueryParam: false
+      defaultPolicy: "API-Testing"
+      policyDefinition:
+        defaultStrength: "MEDIUM"
+        defaultThreshold: "MEDIUM"
+        rules:
+          # SQL Injection
+          - id: 40018
+            name: "SQL Injection"
+            threshold: "LOW"
+            strength: "HIGH"
+          
+          # Cross Site Scripting
+          - id: 40012
+            name: "Cross Site Scripting (Reflected)"
+            threshold: "LOW"
+            strength: "HIGH"
+          - id: 40014
+            name: "Cross Site Scripting (Persistent)"
+            threshold: "LOW"
+            strength: "HIGH"
+          
+          # Security Misconfiguration
+          - id: 10021
+            name: "X-Content-Type-Options Header Missing"
+            threshold: "LOW"
+          - id: 10020
+            name: "X-Frame-Options Header Not Set"
+            threshold: "LOW"
+          - id: 10038
+            name: "Content Security Policy (CSP) Header Not Set"
+            threshold: "MEDIUM"
+          
+          # Broken Authentication
+          - id: 10047
+            name: "HTTPS to HTTP Insecure Transition in Form Post"
+            threshold: "MEDIUM"
+          - id: 10095
+            name: "Backup File Disclosure"
+            threshold: "MEDIUM"
+          
+          # XML External Entities (XXE)
+          - id: 90023
+            name: "XML External Entity Attack"
+            threshold: "LOW"
+            strength: "HIGH"
+          
+          # Broken Access Control
+          - id: 40009
+            name: "Improper Access Control"
+            threshold: "LOW"
+            strength: "HIGH"
+          
+          # Security Headers
+          - id: 10035
+            name: "Strict-Transport-Security Header Not Set"
+            threshold: "LOW"
+          - id: 10036
+            name: "Server Leaks Version Information"
+            threshold: "LOW"
+          
+          # API Specific
+          - id: 90034
+            name: "Cloud Metadata Potentially Exposed"
+            threshold: "LOW"
+          - id: 40018
+            name: "SQL Injection - PostgreSQL"
+            threshold: "LOW"
+            strength: "HIGH"
+
+  - type: "report"
+    parameters:
+      template: "risk-confidence-html"
+      theme: "corporate"
+      reportFile: "ZAP-Report"
+      reportFileNamePattern: "ZAP-Report-{timestamp}"
+      reportDir: "/zap/reports"
+      reportTitle: "ReskFlow Security Test Report"
+      reportDescription: "OWASP ZAP security testing results for ReskFlow API"
+      displayReport: false
+    risks:
+      - "info"
+      - "low"
+      - "medium" 
+      - "high"
+    confidences:
+      - "falsepositive"
+      - "low"
+      - "medium"
+      - "high"
+      - "confirmed"
+    sections:
+      - "passingrules"
+      - "instancecount"
+      - "alertdetails"
+      - "alertcount"
+      - "params"
+      - "chart"

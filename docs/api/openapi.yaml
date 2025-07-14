@@ -1,0 +1,695 @@
+openapi: 3.0.3
+info:
+  title: ReskFlow API
+  description: |
+    Enterprise blockchain-based ReskFlow API documentation.
+    
+    ## Authentication
+    Most endpoints require JWT authentication. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your-jwt-token>
+    ```
+    
+    ## Rate Limiting
+    - 100 requests per 15 minutes for unauthenticated requests
+    - 1000 requests per 15 minutes for authenticated requests
+    
+    ## Blockchain Integration
+    Delivery records are stored on Polygon blockchain for transparency.
+    Transaction fees are less than $0.01 per operation.
+  version: 1.0.0
+  contact:
+    email: api@ReskFlow.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.ReskFlow.com/v1
+    description: Production server
+  - url: https://api-staging.ReskFlow.com/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Development server
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Deliveries
+    description: Delivery management
+  - name: Tracking
+    description: Real-time tracking
+  - name: Payments
+    description: Payment processing
+  - name: Users
+    description: User management
+  - name: Drivers
+    description: Driver operations
+
+paths:
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Create new user account
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - firstName
+                - lastName
+                - role
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  pattern: '^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+                  example: SecurePass123!
+                firstName:
+                  type: string
+                  example: John
+                lastName:
+                  type: string
+                  example: Doe
+                role:
+                  type: string
+                  enum: [CUSTOMER, DRIVER, PARTNER]
+                  example: CUSTOMER
+                phone:
+                  type: string
+                  pattern: '^\+?[1-9]\d{1,14}$'
+                  example: "+1234567890"
+                walletAddress:
+                  type: string
+                  pattern: '^0x[a-fA-F0-9]{40}$'
+                  example: "0x742d35Cc6634C0532925a3b844Bc9e7595f2bd7e"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login to existing account
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /deliveries:
+    get:
+      tags:
+        - Deliveries
+      summary: List deliveries
+      operationId: listDeliveries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, CANCELLED, FAILED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, price, -price]
+            default: -createdAt
+      responses:
+        '200':
+          description: List of deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Delivery'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Deliveries
+      summary: Create new reskflow
+      operationId: createDelivery
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeliveryRequest'
+      responses:
+        '201':
+          description: Delivery created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /deliveries/{reskflowId}:
+    get:
+      tags:
+        - Deliveries
+      summary: Get reskflow details
+      operationId: getDelivery
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reskflowId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Delivery details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /deliveries/{reskflowId}/status:
+    put:
+      tags:
+        - Deliveries
+      summary: Update reskflow status
+      operationId: updateDeliveryStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reskflowId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [PICKED_UP, IN_TRANSIT, DELIVERED, FAILED]
+                location:
+                  $ref: '#/components/schemas/Location'
+                proof:
+                  type: string
+                  description: Base64 encoded image or signature
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /tracking/{trackingNumber}:
+    get:
+      tags:
+        - Tracking
+      summary: Track reskflow by tracking number
+      operationId: trackByNumber
+      parameters:
+        - name: trackingNumber
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^DLV[0-9A-Z]{10}$'
+      responses:
+        '200':
+          description: Tracking information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reskflow:
+                    $ref: '#/components/schemas/Delivery'
+                  currentLocation:
+                    $ref: '#/components/schemas/Location'
+                  estimatedArrival:
+                    type: string
+                    format: date-time
+                  trackingHistory:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TrackingEvent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments/intent:
+    post:
+      tags:
+        - Payments
+      summary: Create payment intent
+      operationId: createPaymentIntent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reskflowId
+                - amount
+              properties:
+                reskflowId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: number
+                  minimum: 0.01
+                currency:
+                  type: string
+                  default: USD
+                  enum: [USD, EUR, GBP, JPY, CNY]
+                paymentMethod:
+                  type: string
+                  enum: [CARD, BANK, CRYPTO, WALLET]
+      responses:
+        '200':
+          description: Payment intent created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  intentId:
+                    type: string
+                  clientSecret:
+                    type: string
+                  amount:
+                    type: number
+                  currency:
+                    type: string
+                  status:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /ws:
+    get:
+      tags:
+        - Tracking
+      summary: WebSocket connection for real-time updates
+      description: |
+        Connect to this endpoint using WebSocket protocol for real-time tracking updates.
+        
+        ### Authentication
+        Send auth token as first message after connection:
+        ```json
+        {
+          "type": "auth",
+          "token": "your-jwt-token"
+        }
+        ```
+        
+        ### Subscribe to reskflow updates
+        ```json
+        {
+          "type": "subscribe",
+          "event": "reskflow:track",
+          "reskflowId": "reskflow-uuid"
+        }
+        ```
+        
+        ### Receive location updates
+        ```json
+        {
+          "type": "location:update",
+          "reskflowId": "reskflow-uuid",
+          "location": {
+            "latitude": 40.7128,
+            "longitude": -74.0060,
+            "timestamp": "2024-01-01T12:00:00Z"
+          }
+        }
+        ```
+      responses:
+        '101':
+          description: Switching Protocols
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Invalid input data
+        details:
+          type: object
+          additionalProperties: true
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [CUSTOMER, DRIVER, ADMIN, PARTNER]
+        walletAddress:
+          type: string
+        emailVerified:
+          type: boolean
+        phoneVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Delivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+          pattern: '^DLV[0-9A-Z]{10}$'
+        blockchainId:
+          type: string
+          description: Blockchain transaction hash
+        status:
+          type: string
+          enum: [CREATED, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, CANCELLED, FAILED]
+        sender:
+          $ref: '#/components/schemas/User'
+        recipient:
+          $ref: '#/components/schemas/User'
+        driver:
+          $ref: '#/components/schemas/User'
+        pickupAddress:
+          $ref: '#/components/schemas/Address'
+        reskflowAddress:
+          $ref: '#/components/schemas/Address'
+        packageDetails:
+          $ref: '#/components/schemas/PackageDetails'
+        price:
+          type: number
+          format: decimal
+        distance:
+          type: number
+          format: float
+        estimatedDelivery:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateDeliveryRequest:
+      type: object
+      required:
+        - pickupAddressId
+        - reskflowAddressId
+        - packageDetails
+      properties:
+        recipientEmail:
+          type: string
+          format: email
+        recipientPhone:
+          type: string
+        pickupAddressId:
+          type: string
+          format: uuid
+        reskflowAddressId:
+          type: string
+          format: uuid
+        packageDetails:
+          $ref: '#/components/schemas/PackageDetails'
+        scheduledPickup:
+          type: string
+          format: date-time
+        scheduledDelivery:
+          type: string
+          format: date-time
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 10
+        insuranceAmount:
+          type: number
+          minimum: 0
+
+    PackageDetails:
+      type: object
+      required:
+        - weight
+        - dimensions
+      properties:
+        description:
+          type: string
+        weight:
+          type: number
+          minimum: 0.1
+          description: Weight in kg
+        dimensions:
+          type: object
+          properties:
+            length:
+              type: number
+              minimum: 1
+            width:
+              type: number
+              minimum: 1
+            height:
+              type: number
+              minimum: 1
+        value:
+          type: number
+          minimum: 0
+        fragile:
+          type: boolean
+        category:
+          type: string
+          enum: [DOCUMENTS, ELECTRONICS, CLOTHING, FOOD, FRAGILE, OTHER]
+
+    Address:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        country:
+          type: string
+        postalCode:
+          type: string
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+
+    Location:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+        accuracy:
+          type: number
+          description: Accuracy in meters
+        timestamp:
+          type: string
+          format: date-time
+
+    TrackingEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        location:
+          $ref: '#/components/schemas/Location'
+        description:
+          type: string
+        proof:
+          type: string
+          description: IPFS hash of proof image
+        createdAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
