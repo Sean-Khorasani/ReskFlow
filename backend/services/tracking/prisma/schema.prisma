@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TrackingSession {
+  id                String   @id @default(cuid())
+  orderId           String   @unique
+  driverId          String
+  customerId        String
+  merchantId        String
+  
+  // Session details
+  sessionType       TrackingType
+  status            TrackingStatus
+  
+  // Location tracking
+  startLocation     Json?    // { lat, lng, address }
+  currentLocation   Json?    // { lat, lng, address, timestamp }
+  endLocation       Json?    // { lat, lng, address }
+  
+  // Route information
+  plannedRoute      Json?    // Array of waypoints
+  actualRoute       Json[]   // Array of location points with timestamps
+  
+  // Timing
+  estimatedArrival  DateTime?
+  actualArrival     DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  
+  // Metadata
+  metadata          Json?    // Additional tracking data
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  trackingEvents    TrackingEvent[]
+  locationUpdates   LocationUpdate[]
+  
+  @@map("tracking_sessions")
+}
+
+model TrackingEvent {
+  id              String         @id @default(cuid())
+  sessionId       String
+  
+  // Event details
+  eventType       EventType
+  eventData       Json           // Event-specific data
+  location        Json?          // Location when event occurred
+  
+  // Timing
+  timestamp       DateTime       @default(now())
+  
+  // Metadata
+  source          EventSource    // mobile_app, web_app, system, driver_app
+  metadata        Json?
+  
+  // Relations
+  session         TrackingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("tracking_events")
+}
+
+model LocationUpdate {
+  id              String         @id @default(cuid())
+  sessionId       String
+  
+  // Location data
+  latitude        Float
+  longitude       Float
+  accuracy        Float?         // GPS accuracy in meters
+  altitude        Float?
+  speed           Float?         // Speed in km/h
+  heading         Float?         // Direction in degrees
+  
+  // Address information
+  address         String?
+  city            String?
+  country         String?
+  
+  // Timing
+  timestamp       DateTime       @default(now())
+  
+  // Battery and network info
+  batteryLevel    Float?
+  networkType     String?        // wifi, cellular, etc.
+  
+  // Relations
+  session         TrackingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("location_updates")
+  @@index([sessionId, timestamp])
+}
+
+model GeofenceZone {
+  id              String         @id @default(cuid())
+  name            String
+  description     String?
+  
+  // Zone definition
+  zoneType        ZoneType
+  coordinates     Json           // Polygon coordinates or center + radius
+  radius          Float?         // For circular zones
+  
+  // Zone properties
+  isActive        Boolean        @default(true)
+  triggerEvents   String[]       // enter, exit, dwell
+  
+  // Associated entities
+  merchantId      String?
+  areaId          String?        // For delivery areas
+  
+  // Metadata
+  metadata        Json?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  // Relations
+  geofenceEvents  GeofenceEvent[]
+  
+  @@map("geofence_zones")
+}
+
+model GeofenceEvent {
+  id              String         @id @default(cuid())
+  zoneId          String
+  sessionId       String?
+  driverId        String
+  
+  // Event details
+  eventType       GeofenceEventType
+  location        Json           // Location where event occurred
+  
+  // Timing
+  enteredAt       DateTime?
+  exitedAt        DateTime?
+  dwellTime       Int?           // Time spent in zone (seconds)
+  
+  // Metadata
+  metadata        Json?
+  createdAt       DateTime       @default(now())
+  
+  // Relations
+  zone            GeofenceZone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  
+  @@map("geofence_events")
+}
+
+model RouteOptimization {
+  id              String         @id @default(cuid())
+  driverId        String
+  
+  // Route details
+  optimizationType OptimizationType
+  waypoints       Json[]         // Array of delivery points
+  optimizedRoute  Json[]         // Optimized sequence
+  
+  // Metrics
+  totalDistance   Float          // In kilometers
+  estimatedTime   Int            // In minutes
+  fuelEstimate    Float?         // Estimated fuel consumption
+  
+  // Status
+  status          RouteStatus
+  
+  // Timing
+  plannedStartTime DateTime
+  actualStartTime  DateTime?
+  plannedEndTime   DateTime?
+  actualEndTime    DateTime?
+  
+  // Metadata
+  metadata        Json?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  @@map("route_optimizations")
+}
+
+model TrackingMetrics {
+  id              String         @id @default(cuid())
+  sessionId       String?
+  driverId        String?
+  
+  // Performance metrics
+  totalDistance   Float          // Total distance covered
+  totalTime       Int            // Total time in seconds
+  averageSpeed    Float          // Average speed in km/h
+  maxSpeed        Float          // Maximum speed recorded
+  
+  // Efficiency metrics
+  routeEfficiency Float?         // Actual vs planned route efficiency
+  timeEfficiency  Float?         // Actual vs estimated time efficiency
+  
+  // Quality metrics
+  gpsAccuracy     Float?         // Average GPS accuracy
+  dataCompleteness Float?        // Percentage of expected data points
+  
+  // Date range
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Metadata
+  metadata        Json?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  @@map("tracking_metrics")
+}
+
+enum TrackingType {
+  DELIVERY
+  PICKUP
+  ROUND_TRIP
+  MULTI_STOP
+}
+
+enum TrackingStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum EventType {
+  SESSION_STARTED
+  SESSION_PAUSED
+  SESSION_RESUMED
+  SESSION_COMPLETED
+  LOCATION_UPDATED
+  ROUTE_DEVIATED
+  GEOFENCE_ENTERED
+  GEOFENCE_EXITED
+  DELIVERY_STARTED
+  DELIVERY_COMPLETED
+  PICKUP_STARTED
+  PICKUP_COMPLETED
+  EMERGENCY_TRIGGERED
+  BREAK_STARTED
+  BREAK_ENDED
+  TRAFFIC_DELAY
+  VEHICLE_BREAKDOWN
+  CUSTOMER_CONTACT
+}
+
+enum EventSource {
+  MOBILE_APP
+  WEB_APP
+  SYSTEM
+  DRIVER_APP
+  IOT_DEVICE
+  API
+}
+
+enum ZoneType {
+  CIRCULAR
+  POLYGON
+  RECTANGLE
+  MERCHANT_LOCATION
+  DELIVERY_AREA
+  RESTRICTED_ZONE
+  PARKING_AREA
+}
+
+enum GeofenceEventType {
+  ENTERED
+  EXITED
+  DWELLING
+}
+
+enum OptimizationType {
+  SHORTEST_DISTANCE
+  FASTEST_TIME
+  FUEL_EFFICIENT
+  TRAFFIC_AWARE
+  MULTI_OBJECTIVE
+}
+
+enum RouteStatus {
+  PLANNING
+  OPTIMIZED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}

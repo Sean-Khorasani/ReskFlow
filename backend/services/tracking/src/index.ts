@@ -1,279 +1,434 @@
 import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
+import 'express-async-errors';
+
+import { PrismaClient } from '@prisma/client';
+import { Server } from 'socket.io';
 import { createServer } from 'http';
-import { Server as SocketServer } from 'socket.io';
-import { config, logger, connectDatabase, redis, prisma } from '@reskflow/shared';
-import { IoTManager } from './services/IoTManager';
-import { GeofenceService } from './services/GeofenceService';
-import { TrackingProcessor } from './services/TrackingProcessor';
-import { AlertService } from './services/AlertService';
-import { setupMQTTBroker } from './mqtt/broker';
 
-const app = express();
-app.use(express.json());
+import trackingRoutes from './routes/tracking.routes';
+import { redisClient } from './utils/redis';
+import { logger } from './utils/logger';
+import { logRequest } from './middleware/auth';
 
-const httpServer = createServer(app);
-const io = new SocketServer(httpServer, {
-  cors: {
-    origin: '*',
-    credentials: true,
-  },
-});
+class TrackingServiceApp {
+  private app: express.Application;
+  private server: any;
+  private io: Server;
+  private prisma: PrismaClient;
 
-let iotManager: IoTManager;
-let geofenceService: GeofenceService;
-let trackingProcessor: TrackingProcessor;
-let alertService: AlertService;
-
-async function startService() {
-  try {
-    // Connect to database
-    await connectDatabase();
-    logger.info('Tracking service: Database connected');
-
-    // Initialize services
-    iotManager = new IoTManager();
-    geofenceService = new GeofenceService();
-    trackingProcessor = new TrackingProcessor();
-    alertService = new AlertService();
-
-    // Setup MQTT broker for IoT devices
-    await setupMQTTBroker();
-
-    // Initialize IoT connections
-    await iotManager.initialize();
-
-    // Socket.IO connection handling
-    io.on('connection', (socket) => {
-      logger.info(`Client connected: ${socket.id}`);
-
-      // Subscribe to reskflow tracking
-      socket.on('track:reskflow', async (reskflowId: string) => {
-        socket.join(`reskflow:${reskflowId}`);
-        
-        // Send current location if available
-        const currentLocation = await redis.getJson(`location:reskflow:${reskflowId}`);
-        if (currentLocation) {
-          socket.emit('location:update', {
-            reskflowId,
-            location: currentLocation,
-          });
-        }
-      });
-
-      // Subscribe to driver tracking
-      socket.on('track:driver', async (driverId: string) => {
-        socket.join(`driver:${driverId}`);
-        
-        const currentLocation = await redis.getJson(`location:driver:${driverId}`);
-        if (currentLocation) {
-          socket.emit('driver:location', {
-            driverId,
-            location: currentLocation,
-          });
-        }
-      });
-
-      // Handle driver location updates
-      socket.on('location:update', async (data: any) => {
-        await handleLocationUpdate(data);
-      });
-
-      socket.on('disconnect', () => {
-        logger.info(`Client disconnected: ${socket.id}`);
-      });
-    });
-
-    // REST API endpoints
-    app.get('/health', (req, res) => {
-      res.json({ status: 'healthy', service: 'tracking' });
-    });
-
-    // Get reskflow tracking history
-    app.get('/tracking/:reskflowId', async (req, res) => {
-      try {
-        const { reskflowId } = req.params;
-        
-        const trackingHistory = await prisma.trackingEvent.findMany({
-          where: { reskflowId },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        const currentLocation = await redis.getJson(`location:reskflow:${reskflowId}`);
-
-        res.json({
-          reskflowId,
-          currentLocation,
-          history: trackingHistory,
-        });
-      } catch (error) {
-        logger.error('Failed to get tracking history', error);
-        res.status(500).json({ error: 'Failed to get tracking data' });
-      }
-    });
-
-    // Create geofence
-    app.post('/geofence', async (req, res) => {
-      try {
-        const { reskflowId, type, coordinates, radius } = req.body;
-        
-        const geofence = await geofenceService.createGeofence({
-          reskflowId,
-          type,
-          coordinates,
-          radius,
-        });
-
-        res.json(geofence);
-      } catch (error) {
-        logger.error('Failed to create geofence', error);
-        res.status(500).json({ error: 'Failed to create geofence' });
-      }
-    });
-
-    // Get IoT device status
-    app.get('/devices/:deviceId/status', async (req, res) => {
-      try {
-        const { deviceId } = req.params;
-        const status = await iotManager.getDeviceStatus(deviceId);
-        res.json(status);
-      } catch (error) {
-        logger.error('Failed to get device status', error);
-        res.status(500).json({ error: 'Failed to get device status' });
-      }
-    });
-
-    // Start tracking processor
-    trackingProcessor.startProcessing();
-
-    // Start server
-    const PORT = 3003;
-    httpServer.listen(PORT, () => {
-      logger.info(`📍 Tracking service ready at http://localhost:${PORT}`);
-    });
-
-  } catch (error) {
-    logger.error('Failed to start tracking service', error);
-    process.exit(1);
+  constructor() {
+    this.app = express();
+    this.prisma = new PrismaClient();
+    this.setupMiddleware();
+    this.setupRoutes();
+    this.setupWebSocket();
+    this.setupErrorHandling();
   }
-}
 
-async function handleLocationUpdate(data: any) {
-  try {
-    const { deviceId, location, metadata } = data;
-
-    // Process location update
-    const processed = await trackingProcessor.processLocationUpdate({
-      deviceId,
-      location,
-      metadata,
-    });
-
-    // Check geofences
-    const geofenceEvents = await geofenceService.checkGeofences(
-      processed.entityId,
-      location
-    );
-
-    // Handle geofence events
-    for (const event of geofenceEvents) {
-      await alertService.handleGeofenceEvent(event);
-    }
-
-    // Update real-time location
-    const entityType = processed.entityType;
-    const entityId = processed.entityId;
-
-    await redis.setJson(
-      `location:${entityType}:${entityId}`,
-      {
-        ...location,
-        lastUpdated: new Date(),
-        metadata,
+  private setupMiddleware(): void {
+    // Security middleware
+    this.app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'", "ws:", "wss:"],
+        },
       },
-      300 // 5 minutes TTL
-    );
+    }));
 
-    // Broadcast location update
-    io.to(`${entityType}:${entityId}`).emit('location:update', {
-      entityId,
-      location,
-      timestamp: new Date(),
+    // CORS configuration
+    this.app.use(cors({
+      origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
+      credentials: true,
+      optionsSuccessStatus: 200,
+    }));
+
+    // Compression
+    this.app.use(compression());
+
+    // Body parsing
+    this.app.use(express.json({ limit: '10mb' }));
+    this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+    // Logging
+    this.app.use(morgan('combined', {
+      stream: {
+        write: (message: string) => {
+          logger.info(message.trim());
+        },
+      },
+    }));
+
+    // Request logging
+    this.app.use(logRequest);
+
+    // Trust proxy for rate limiting and IP extraction
+    this.app.set('trust proxy', 1);
+  }
+
+  private setupRoutes(): void {
+    // Health check
+    this.app.get('/health', (req, res) => {
+      res.status(200).json({
+        status: 'healthy',
+        service: 'tracking-service',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: process.env.API_VERSION || '1.0.0',
+      });
     });
 
-    // Store in time-series database for analytics
-    await storeLocationHistory({
-      entityType,
-      entityId,
-      location,
-      metadata,
+    // API routes
+    this.app.use('/api/v1/tracking', trackingRoutes);
+
+    // 404 handler
+    this.app.use('*', (req, res) => {
+      logger.warn('Route not found', {
+        method: req.method,
+        path: req.originalUrl,
+        ip: req.ip,
+      });
+
+      res.status(404).json({
+        error: 'Route not found',
+        path: req.originalUrl,
+        timestamp: new Date().toISOString(),
+      });
+    });
+  }
+
+  private setupWebSocket(): void {
+    this.server = createServer(this.app);
+    this.io = new Server(this.server, {
+      cors: {
+        origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
+        methods: ['GET', 'POST'],
+        credentials: true,
+      },
+      transports: ['websocket', 'polling'],
     });
 
-  } catch (error) {
-    logger.error('Failed to handle location update', error);
+    // WebSocket authentication middleware
+    this.io.use((socket, next) => {
+      const token = socket.handshake.auth.token || socket.handshake.headers.authorization;
+      
+      if (!token) {
+        logger.warn('WebSocket connection attempt without token', {
+          socketId: socket.id,
+          ip: socket.handshake.address,
+        });
+        return next(new Error('Authentication required'));
+      }
+
+      // Validate token (simplified)
+      // In production, use proper JWT validation
+      if (token.length < 10) {
+        logger.warn('WebSocket connection attempt with invalid token', {
+          socketId: socket.id,
+          ip: socket.handshake.address,
+        });
+        return next(new Error('Invalid token'));
+      }
+
+      // Attach user info to socket
+      (socket as any).user = {
+        id: 'user_' + Math.random().toString(36).substr(2, 9),
+        role: 'user',
+      };
+
+      logger.info('WebSocket client authenticated', {
+        socketId: socket.id,
+        userId: (socket as any).user.id,
+        ip: socket.handshake.address,
+      });
+
+      next();
+    });
+
+    this.io.on('connection', (socket) => {
+      const user = (socket as any).user;
+      
+      logger.info('WebSocket client connected', {
+        socketId: socket.id,
+        userId: user?.id,
+        ip: socket.handshake.address,
+      });
+
+      // Handle tracking session subscription
+      socket.on('subscribe_session', (sessionId: string) => {
+        if (!sessionId) {
+          socket.emit('error', { message: 'Session ID is required' });
+          return;
+        }
+
+        socket.join(`session:${sessionId}`);
+        logger.info('Client subscribed to session updates', {
+          socketId: socket.id,
+          userId: user?.id,
+          sessionId,
+        });
+
+        socket.emit('subscribed', { sessionId });
+      });
+
+      // Handle driver location subscription
+      socket.on('subscribe_driver', (driverId: string) => {
+        if (!driverId) {
+          socket.emit('error', { message: 'Driver ID is required' });
+          return;
+        }
+
+        socket.join(`driver:${driverId}`);
+        logger.info('Client subscribed to driver updates', {
+          socketId: socket.id,
+          userId: user?.id,
+          driverId,
+        });
+
+        socket.emit('subscribed', { driverId });
+      });
+
+      // Handle unsubscription
+      socket.on('unsubscribe_session', (sessionId: string) => {
+        socket.leave(`session:${sessionId}`);
+        logger.info('Client unsubscribed from session updates', {
+          socketId: socket.id,
+          userId: user?.id,
+          sessionId,
+        });
+      });
+
+      socket.on('unsubscribe_driver', (driverId: string) => {
+        socket.leave(`driver:${driverId}`);
+        logger.info('Client unsubscribed from driver updates', {
+          socketId: socket.id,
+          userId: user?.id,
+          driverId,
+        });
+      });
+
+      // Handle real-time location updates from drivers
+      socket.on('driver_location_update', async (data: {
+        driverId: string;
+        sessionId?: string;
+        location: {
+          latitude: number;
+          longitude: number;
+          accuracy?: number;
+          speed?: number;
+          heading?: number;
+        };
+      }) => {
+        try {
+          // Validate data
+          if (!data.driverId || !data.location || !data.location.latitude || !data.location.longitude) {
+            socket.emit('error', { message: 'Invalid location data' });
+            return;
+          }
+
+          // Update location in Redis
+          await redisClient.setDriverLocation(data.driverId, {
+            ...data.location,
+            timestamp: new Date(),
+          });
+
+          // Broadcast to subscribers
+          this.io.to(`driver:${data.driverId}`).emit('driver_location', {
+            driverId: data.driverId,
+            location: data.location,
+            timestamp: new Date().toISOString(),
+          });
+
+          if (data.sessionId) {
+            this.io.to(`session:${data.sessionId}`).emit('location_update', {
+              sessionId: data.sessionId,
+              location: data.location,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          logger.debug('Driver location update broadcasted', {
+            driverId: data.driverId,
+            sessionId: data.sessionId,
+            subscriberCount: this.io.sockets.adapter.rooms.get(`driver:${data.driverId}`)?.size || 0,
+          });
+
+        } catch (error) {
+          logger.error('Failed to process driver location update', {
+            error: error.message,
+            data,
+            socketId: socket.id,
+          });
+
+          socket.emit('error', { message: 'Failed to process location update' });
+        }
+      });
+
+      // Handle ping/pong for connection health
+      socket.on('ping', () => {
+        socket.emit('pong', { timestamp: new Date().toISOString() });
+      });
+
+      // Handle disconnection
+      socket.on('disconnect', (reason) => {
+        logger.info('WebSocket client disconnected', {
+          socketId: socket.id,
+          userId: user?.id,
+          reason,
+          ip: socket.handshake.address,
+        });
+      });
+
+      // Handle errors
+      socket.on('error', (error) => {
+        logger.error('WebSocket error', {
+          error: error.message,
+          socketId: socket.id,
+          userId: user?.id,
+        });
+      });
+    });
+
+    logger.info('WebSocket server configured');
+  }
+
+  private setupErrorHandling(): void {
+    // Global error handler
+    this.app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+      logger.error('Unhandled error', {
+        error: error.message,
+        stack: error.stack,
+        method: req.method,
+        path: req.path,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      res.status(500).json({
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      logger.error('Uncaught exception', {
+        error: error.message,
+        stack: error.stack,
+      });
+      
+      this.gracefulShutdown('UNCAUGHT_EXCEPTION');
+    });
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      logger.error('Unhandled promise rejection', {
+        reason,
+        promise,
+      });
+      
+      this.gracefulShutdown('UNHANDLED_REJECTION');
+    });
+
+    // Handle shutdown signals
+    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
+  }
+
+  private async gracefulShutdown(signal: string): Promise<void> {
+    logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+    try {
+      // Stop accepting new connections
+      if (this.server) {
+        this.server.close(() => {
+          logger.info('HTTP server closed');
+        });
+      }
+
+      // Close WebSocket connections
+      if (this.io) {
+        this.io.close(() => {
+          logger.info('WebSocket server closed');
+        });
+      }
+
+      // Close database connections
+      await this.prisma.$disconnect();
+      logger.info('Database connection closed');
+
+      // Close Redis connection
+      await redisClient.disconnect();
+      logger.info('Redis connection closed');
+
+      logger.info('Graceful shutdown completed');
+      process.exit(0);
+
+    } catch (error) {
+      logger.error('Error during graceful shutdown', {
+        error: error.message,
+        stack: error.stack,
+      });
+      process.exit(1);
+    }
+  }
+
+  public async start(): Promise<void> {
+    try {
+      // Connect to Redis
+      await redisClient.connect();
+      logger.info('Connected to Redis');
+
+      // Test database connection
+      await this.prisma.$connect();
+      logger.info('Connected to database');
+
+      // Start server
+      const port = process.env.PORT || 3007;
+      
+      this.server.listen(port, () => {
+        logger.info('Tracking service started', {
+          port,
+          nodeEnv: process.env.NODE_ENV || 'development',
+          version: process.env.API_VERSION || '1.0.0',
+        });
+      });
+
+    } catch (error) {
+      logger.error('Failed to start tracking service', {
+        error: error.message,
+        stack: error.stack,
+      });
+      process.exit(1);
+    }
+  }
+
+  // Public method to broadcast events to WebSocket clients
+  public broadcastToSession(sessionId: string, event: string, data: any): void {
+    this.io.to(`session:${sessionId}`).emit(event, {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  public broadcastToDriver(driverId: string, event: string, data: any): void {
+    this.io.to(`driver:${driverId}`).emit(event, {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 
-async function storeLocationHistory(data: any) {
-  try {
-    // In production, use a time-series database like InfluxDB or TimescaleDB
-    const key = `location:history:${data.entityType}:${data.entityId}`;
-    const history = await redis.getJson(key) || [];
-    
-    history.push({
-      location: data.location,
-      timestamp: new Date(),
-      metadata: data.metadata,
-    });
-
-    // Keep only last 100 points
-    if (history.length > 100) {
-      history.shift();
-    }
-
-    await redis.setJson(key, history, 3600); // 1 hour TTL
-  } catch (error) {
-    logger.error('Failed to store location history', error);
-  }
-}
-
-// IoT device message handler
-iotManager.on('message', async (topic: string, message: any) => {
-  try {
-    const { deviceId, type, data } = message;
-
-    switch (type) {
-      case 'location':
-        await handleLocationUpdate({
-          deviceId,
-          location: data.location,
-          metadata: data.metadata,
-        });
-        break;
-
-      case 'sensor':
-        await trackingProcessor.processSensorData({
-          deviceId,
-          sensorType: data.sensorType,
-          value: data.value,
-          timestamp: data.timestamp,
-        });
-        break;
-
-      case 'alert':
-        await alertService.handleDeviceAlert({
-          deviceId,
-          alertType: data.alertType,
-          severity: data.severity,
-          message: data.message,
-        });
-        break;
-
-      default:
-        logger.warn(`Unknown message type: ${type}`);
-    }
-  } catch (error) {
-    logger.error('Failed to process IoT message', error);
-  }
+// Start the application
+const app = new TrackingServiceApp();
+app.start().catch((error) => {
+  console.error('Failed to start application:', error);
+  process.exit(1);
 });
 
-startService();
+export default TrackingServiceApp;
