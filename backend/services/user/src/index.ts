@@ -12,6 +12,7 @@ import { profileRouter } from './routes/profile.routes';
 import { sessionRouter } from './routes/session.routes';
 import { addressRouter } from './routes/address.routes';
 import { healthRouter } from './routes/health.routes';
+import customerRouter from './routes/customer.routes';
 import { prisma } from './utils/prisma';
 import { redis } from './utils/redis';
 import { logger } from './utils/logger';
@@ -37,6 +38,7 @@ app.use('/users', userRouter);
 app.use('/profile', profileRouter);
 app.use('/sessions', sessionRouter);
 app.use('/addresses', addressRouter);
+app.use('/api/v1/customers', customerRouter);
 
 // Error handling
 app.use(errorHandler);
